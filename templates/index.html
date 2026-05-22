@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 绘本生成器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans">
+  <div class="max-w-2xl mx-auto px-6 py-12">
+    <!-- Header -->
+    <div class="text-center mb-10">
+      <h1 class="text-3xl font-bold text-slate-800 mb-2">AI 绘本生成器</h1>
+      <p class="text-slate-500">上传一份文档（PDF / Word / TXT），AI 自动把它变成一本儿童绘本</p>
+    </div>
+
+    <!-- Upload Area -->
+    <div id="upload-card" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+      <label for="file-input" class="cursor-pointer block border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors">
+        <div class="text-4xl mb-3">📄</div>
+        <p class="text-slate-600 font-medium mb-1">拖拽或点击上传文档</p>
+        <p class="text-sm text-slate-400">支持 PDF / Word / TXT 格式</p>
+        <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt" class="hidden">
+      </label>
+      <div id="file-info" class="hidden mt-4 py-2 px-4 bg-slate-100 rounded-lg text-sm text-slate-600 inline-flex items-center gap-2">
+        <span id="file-name"></span>
+        <button id="clear-file" class="text-slate-400 hover:text-slate-600">&times;</button>
+      </div>
+    </div>
+
+    <!-- Progress Card -->
+    <div id="progress-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6">
+      <h2 id="progress-title" class="text-lg font-semibold text-slate-700 mb-4"></h2>
+      <div class="w-full bg-slate-200 rounded-full h-3 mb-3">
+        <div id="progress-bar" class="bg-indigo-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+      </div>
+      <p id="progress-text" class="text-sm text-slate-500"></p>
+      <p id="progress-page" class="text-sm text-slate-400 mt-1"></p>
+    </div>
+
+    <!-- Error Card -->
+    <div id="error-card" class="hidden bg-red-50 rounded-2xl border border-red-200 p-6 mt-6">
+      <p class="text-red-700 font-medium">出错了</p>
+      <p id="error-text" class="text-red-600 text-sm mt-1"></p>
+      <button onclick="resetUI()" class="mt-3 px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 transition-colors">重试</button>
+    </div>
+
+    <!-- Result Card -->
+    <div id="result-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6 text-center">
+      <div class="text-4xl mb-3">📖</div>
+      <h2 id="result-title" class="text-xl font-bold text-slate-800 mb-2"></h2>
+      <p class="text-slate-500 mb-5">绘本已生成，点击下方按钮下载 PDF</p>
+      <a id="download-btn" href="#" class="inline-block px-8 py-3 bg-indigo-500 text-white rounded-xl font-medium hover:bg-indigo-600 transition-colors shadow-sm">
+        下载绘本 PDF
+      </a>
+      <button onclick="resetUI()" class="mt-4 block mx-auto px-4 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors">重新制作一本</button>
+    </div>
+  </div>
+
+  <script>
+    let jobId = null;
+    let evtSource = null;
+
+    const stageLabels = {
+      starting: "准备中…",
+      parsing: "正在解析文档…",
+      outline: "AI 正在构思绘本大纲…",
+      character_sheets: "AI 正在绘制角色设定图…",
+      generating_images: "AI 正在绘制绘本插图…",
+      building_pdf: "正在合成 PDF 绘本…",
+      done: "完成！",
+    };
+
+    function show(id) { document.getElementById(id).classList.remove('hidden'); }
+    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+    const fileInput = document.getElementById('file-input');
+    const fileInfo = document.getElementById('file-info');
+    const fileName = document.getElementById('file-name');
+
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (!f) return;
+      fileName.textContent = f.name;
+      show('file-info');
+      uploadFile(f);
+    });
+
+    document.getElementById('clear-file').addEventListener('click', () => {
+      fileInput.value = '';
+      hide('file-info');
+    });
+
+    const dropZone = document.querySelector('label[for="file-input"]');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-indigo-400', 'bg-indigo-50/30'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-indigo-400', 'bg-indigo-50/30'); });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('border-indigo-400', 'bg-indigo-50/30');
+      const f = e.dataTransfer.files[0];
+      if (!f) return;
+      fileInput.files = e.dataTransfer.files;
+      fileName.textContent = f.name;
+      show('file-info');
+      uploadFile(f);
+    });
+
+    async function uploadFile(file) {
+      hide('result-card');
+      hide('error-card');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+        jobId = data.job_id;
+        show('progress-card');
+        document.getElementById('progress-title').textContent = '处理中…';
+        startSSE(jobId);
+      } catch (e) {
+        showError('上传失败：' + e.message);
+      }
+    }
+
+    function startSSE(id) {
+      if (evtSource) { evtSource.close(); evtSource = null; }
+      evtSource = new EventSource('/api/stream/' + id);
+
+      evtSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.error) { showError(data.error); evtSource.close(); return; }
+        updateProgress(data);
+      };
+
+      evtSource.onerror = () => {
+        evtSource.close();
+        evtSource = null;
+      };
+    }
+
+    function updateProgress(data) {
+      const bar = document.getElementById('progress-bar');
+      bar.style.width = (data.progress || 0) + '%';
+      document.getElementById('progress-text').textContent = stageLabels[data.stage] || data.stage;
+
+      if (data.stage === 'generating_images') {
+        document.getElementById('progress-page').textContent =
+          `正在绘制第 ${data.current_page || 1}/${data.total_pages || '?'} 页…`;
+      } else if (data.stage === 'character_sheets') {
+        document.getElementById('progress-page').textContent =
+          `正在绘制第 ${data.current_character || 1}/${data.total_characters || '?'} 个角色…`;
+      } else {
+        document.getElementById('progress-page').textContent = '';
+      }
+
+      if (data.stage === 'done') {
+        evtSource.close();
+        evtSource = null;
+        hide('progress-card');
+        show('result-card');
+        document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
+        document.getElementById('download-btn').href = '/api/download/' + jobId;
+      }
+
+      if (data.stage === 'error') {
+        evtSource.close();
+        evtSource = null;
+        showError(data.error);
+      }
+    }
+
+    function showError(msg) {
+      hide('progress-card');
+      show('error-card');
+      document.getElementById('error-text').textContent = msg;
+    }
+
+    function resetUI() {
+      if (evtSource) { evtSource.close(); evtSource = null; }
+      jobId = null;
+      hide('progress-card');
+      hide('error-card');
+      hide('result-card');
+      hide('file-info');
+      fileInput.value = '';
+    }
+  </script>
+</body>
+</html>
