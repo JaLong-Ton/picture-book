@@ -203,6 +203,7 @@
         const data = await resp.json();
         if (data.error) { showError(data.error); return; }
         jobId = data.job_id;
+        localStorage.setItem('pb_job_id', jobId);
         show('progress-card');
         document.getElementById('progress-title').textContent = '正在解析文档…';
         startSSE(jobId);
@@ -252,6 +253,7 @@
 
       if (data.stage === 'done') {
         if (evtSource) { evtSource.close(); evtSource = null; }
+        localStorage.removeItem('pb_job_id');
         hide('progress-card');
         show('result-card');
         document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
@@ -260,6 +262,7 @@
 
       if (data.stage === 'error') {
         if (evtSource) { evtSource.close(); evtSource = null; }
+        localStorage.removeItem('pb_job_id');
         // If job has total_pages, outline was generated — can retry image generation
         showError(data.error, !!data.total_pages);
       }
@@ -403,6 +406,7 @@
     function resetUI() {
       if (evtSource) { evtSource.close(); evtSource = null; }
       jobId = null;
+      localStorage.removeItem('pb_job_id');
       photoFiles = [];
       renderPhotos();
       hide('progress-card');
@@ -412,6 +416,37 @@
       hide('file-info');
       fileInput.value = '';
     }
+
+    // Restore job state after page refresh
+    async function restoreJob() {
+      const savedId = localStorage.getItem('pb_job_id');
+      if (!savedId) return;
+      try {
+        const resp = await fetch('/api/status/' + savedId);
+        if (!resp.ok) { localStorage.removeItem('pb_job_id'); return; }
+        const data = await resp.json();
+        if (data.error) { localStorage.removeItem('pb_job_id'); return; }
+        jobId = savedId;
+        if (data.stage === 'done') {
+          show('result-card');
+          document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
+          document.getElementById('download-btn').href = '/api/download/' + jobId;
+        } else if (data.stage === 'error') {
+          showError(data.error, !!data.total_pages);
+        } else if (data.stage === 'outline_ready') {
+          loadOutline(jobId);
+        } else {
+          // In progress — reconnect SSE
+          show('progress-card');
+          document.getElementById('progress-title').textContent = '正在恢复进度…';
+          startSSE(jobId);
+        }
+      } catch {
+        localStorage.removeItem('pb_job_id');
+      }
+    }
+
+    restoreJob();
   </script>
 </body>
 </html>
