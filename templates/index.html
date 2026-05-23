@@ -39,6 +39,35 @@
       <div id="photo-preview" class="hidden mt-4 flex flex-wrap gap-3 justify-center"></div>
     </div>
 
+    <!-- Outline Preview Card -->
+    <div id="outline-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6">
+      <h2 class="text-lg font-semibold text-slate-700 mb-1">📖 大纲预览</h2>
+      <p class="text-sm text-slate-400 mb-5">确认内容无误后点击「生成绘本」，也可以直接编辑修改</p>
+
+      <!-- Title -->
+      <div class="mb-5">
+        <label class="block text-xs font-medium text-slate-500 mb-1">绘本标题</label>
+        <input id="outline-title" type="text"
+          class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none">
+      </div>
+
+      <!-- Characters -->
+      <div id="outline-characters" class="mb-5"></div>
+
+      <!-- Pages -->
+      <div id="outline-pages" class="space-y-4 mb-6"></div>
+
+      <!-- Actions -->
+      <div class="flex gap-3 justify-end">
+        <button onclick="resetUI()" class="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors text-sm">
+          重新上传
+        </button>
+        <button onclick="saveAndGenerate()" class="px-8 py-2.5 bg-indigo-500 text-white rounded-xl font-medium hover:bg-indigo-600 transition-colors shadow-sm text-sm">
+          生成绘本
+        </button>
+      </div>
+    </div>
+
     <!-- Progress Card -->
     <div id="progress-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6">
       <h2 id="progress-title" class="text-lg font-semibold text-slate-700 mb-4"></h2>
@@ -53,7 +82,10 @@
     <div id="error-card" class="hidden bg-red-50 rounded-2xl border border-red-200 p-6 mt-6">
       <p class="text-red-700 font-medium">出错了</p>
       <p id="error-text" class="text-red-600 text-sm mt-1"></p>
-      <button onclick="resetUI()" class="mt-3 px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 transition-colors">重试</button>
+      <div class="mt-3 flex gap-2">
+        <button id="retry-btn" onclick="retryGeneration()" class="hidden px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm hover:bg-indigo-600 transition-colors">重试生成</button>
+        <button onclick="resetUI()" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 transition-colors">重新开始</button>
+      </div>
     </div>
 
     <!-- Result Card -->
@@ -77,6 +109,7 @@
       starting: "准备中…",
       parsing: "正在解析文档…",
       outline: "AI 正在构思绘本大纲…",
+      outline_ready: "大纲已生成，请确认",
       character_sheets: "AI 正在绘制角色设定图…",
       generating_images: "AI 正在绘制绘本插图…",
       building_pdf: "正在合成 PDF 绘本…",
@@ -158,6 +191,7 @@
     async function uploadFile(file) {
       hide('result-card');
       hide('error-card');
+      hide('outline-card');
       const formData = new FormData();
       formData.append('file', file);
       for (const p of photoFiles) {
@@ -170,7 +204,7 @@
         if (data.error) { showError(data.error); return; }
         jobId = data.job_id;
         show('progress-card');
-        document.getElementById('progress-title').textContent = '处理中…';
+        document.getElementById('progress-title').textContent = '正在解析文档…';
         startSSE(jobId);
       } catch (e) {
         showError('上传失败：' + e.message);
@@ -194,6 +228,14 @@
     }
 
     function updateProgress(data) {
+      // Outline ready → show preview, stop SSE
+      if (data.stage === 'outline_ready') {
+        if (evtSource) { evtSource.close(); evtSource = null; }
+        hide('progress-card');
+        loadOutline(jobId);
+        return;
+      }
+
       const bar = document.getElementById('progress-bar');
       bar.style.width = (data.progress || 0) + '%';
       document.getElementById('progress-text').textContent = stageLabels[data.stage] || data.stage;
@@ -209,8 +251,7 @@
       }
 
       if (data.stage === 'done') {
-        evtSource.close();
-        evtSource = null;
+        if (evtSource) { evtSource.close(); evtSource = null; }
         hide('progress-card');
         show('result-card');
         document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
@@ -218,16 +259,145 @@
       }
 
       if (data.stage === 'error') {
-        evtSource.close();
-        evtSource = null;
-        showError(data.error);
+        if (evtSource) { evtSource.close(); evtSource = null; }
+        // If job has total_pages, outline was generated — can retry image generation
+        showError(data.error, !!data.total_pages);
       }
     }
 
-    function showError(msg) {
+    async function loadOutline(id) {
+      try {
+        const resp = await fetch('/api/outline/' + id);
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+        renderOutline(data);
+        show('outline-card');
+      } catch (e) {
+        showError('加载大纲失败：' + e.message);
+      }
+    }
+
+    function renderOutline(outline) {
+      // Title
+      document.getElementById('outline-title').value = outline.title || '';
+
+      // Characters
+      const charDiv = document.getElementById('outline-characters');
+      const chars = outline.characters || [];
+      if (chars.length > 0) {
+        charDiv.innerHTML = '<label class="block text-xs font-medium text-slate-500 mb-2">角色设定</label>' +
+          '<div class="flex flex-wrap gap-2">' +
+          chars.map(c => `<span class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm">${esc(c.name || '')}（${esc(c.species || '')}）</span>`).join('') +
+          '</div>';
+      } else {
+        charDiv.innerHTML = '';
+      }
+
+      // Pages
+      const pagesDiv = document.getElementById('outline-pages');
+      const pages = outline.pages || [];
+      pagesDiv.innerHTML = pages.map((p, i) => `
+        <div class="border border-slate-200 rounded-xl p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold flex items-center justify-center">${i + 1}</span>
+            <input type="text" value="${esc(p.title || '')}" data-page="${i}" data-field="title"
+              class="flex-1 px-2 py-1 border border-slate-200 rounded-md text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none">
+          </div>
+          <textarea data-page="${i}" data-field="text" rows="2"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 resize-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none">${esc(p.text || p.key_content || '')}</textarea>
+        </div>
+      `).join('');
+    }
+
+    async function saveAndGenerate() {
+      // Collect edited outline
+      const title = document.getElementById('outline-title').value;
+      const pageEls = document.querySelectorAll('#outline-pages [data-page]');
+      const pagesMap = {};
+      pageEls.forEach(el => {
+        const idx = el.dataset.page;
+        if (!pagesMap[idx]) pagesMap[idx] = {};
+        pagesMap[idx][el.dataset.field] = el.value;
+      });
+
+      // Load original outline to preserve fields we didn't edit (visual, layout, etc.)
+      let original;
+      try {
+        const resp = await fetch('/api/outline/' + jobId);
+        original = await resp.json();
+      } catch { original = {}; }
+
+      const pages = (original.pages || []).map((p, i) => {
+        const edited = pagesMap[String(i)] || {};
+        return { ...p, title: edited.title ?? p.title, text: edited.text ?? p.text ?? p.key_content };
+      });
+
+      const outline = { ...original, title, pages };
+
+      // Save edited outline
+      try {
+        const resp = await fetch('/api/outline/' + jobId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(outline),
+        });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+      } catch (e) {
+        showError('保存大纲失败：' + e.message);
+        return;
+      }
+
+      // Start generation
+      try {
+        const resp = await fetch('/api/generate/' + jobId, { method: 'POST' });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+      } catch (e) {
+        showError('启动生成失败：' + e.message);
+        return;
+      }
+
+      // Show progress and resume SSE
+      hide('outline-card');
+      show('progress-card');
+      document.getElementById('progress-title').textContent = '正在生成绘本…';
+      document.getElementById('progress-bar').style.width = '0%';
+      startSSE(jobId);
+    }
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function showError(msg, retryable) {
       hide('progress-card');
+      hide('outline-card');
       show('error-card');
       document.getElementById('error-text').textContent = msg;
+      const retryBtn = document.getElementById('retry-btn');
+      if (retryable && jobId) {
+        retryBtn.classList.remove('hidden');
+      } else {
+        retryBtn.classList.add('hidden');
+      }
+    }
+
+    async function retryGeneration() {
+      if (!jobId) return;
+      try {
+        const resp = await fetch('/api/retry/' + jobId, { method: 'POST' });
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+        hide('error-card');
+        show('progress-card');
+        document.getElementById('progress-title').textContent = '重试生成中…';
+        startSSE(jobId);
+      } catch (e) {
+        showError('重试失败：' + e.message);
+      }
     }
 
     function resetUI() {
@@ -238,6 +408,7 @@
       hide('progress-card');
       hide('error-card');
       hide('result-card');
+      hide('outline-card');
       hide('file-info');
       fileInput.value = '';
     }

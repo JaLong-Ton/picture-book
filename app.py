@@ -417,6 +417,25 @@ def generate(job_id):
     return jsonify({"ok": True})
 
 
+@app.post("/api/retry/<job_id>")
+def retry(job_id):
+    job = job_store.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("stage") != "error":
+        return jsonify({"error": "Job is not in error state"}), 400
+    # Reset to generating state; generate_book() will skip already-generated pages
+    job["stage"] = "generating_images"
+    job.pop("error", None)
+    job["progress"] = 0
+    job_store.update(job_id, stage="generating_images", progress=0, error=None)
+    photo_urls = job.get("photo_urls", [])
+    threading.Thread(
+        target=generate_book, args=(job_id, photo_urls), daemon=True
+    ).start()
+    return jsonify({"ok": True})
+
+
 @app.get("/api/status/<job_id>")
 def status(job_id):
     job = job_store.get(job_id)
