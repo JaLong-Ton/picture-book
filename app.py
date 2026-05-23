@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import requests
 import shutil
 import sqlite3
 import time
@@ -264,6 +265,17 @@ def generate_book(job_id: str, photo_urls: list[str] | None = None):
                         {"name": char.get("name", ""), "url": url}
                     )
 
+        # Download character sheets as base64 for use as reference images
+        ref_images = list(photo_urls) if photo_urls else []
+        for sheet in job.get("character_sheets", []):
+            try:
+                resp = requests.get(sheet["url"], timeout=30)
+                resp.raise_for_status()
+                b64 = base64.b64encode(resp.content).decode()
+                ref_images.append(f"data:image/png;base64,{b64}")
+            except Exception:
+                pass  # skip failed downloads, still generate with text desc
+
         # ── Phase 4: Page images (incremental + resume) ──
         image_buffers = []
         for i, page in enumerate(pages):
@@ -280,22 +292,22 @@ def generate_book(job_id: str, photo_urls: list[str] | None = None):
                 image_buffers.append(buf)
                 continue
 
-            page_err = None
-            for attempt in range(3):
-                try:
-                    prompt = build_image_prompt(page, i + 1, char_desc, has_photo=bool(photo_urls))
-                    url = draw(prompt=prompt, images=photo_urls if photo_urls else None)
-                    buf = download_image(url)
-                    img_path.write_bytes(buf.getvalue())
-                    image_buffers.append(buf)
-                    page_err = None
-                    break
-                except Exception as e:
-                    page_err = e
-                    if attempt < 2:
-                        time.sleep(2 * (attempt + 1))
+            # draw() 只调一次，避免重复生成浪费 API
+            try:
+                prompt = build_image_prompt(page, i + 1, char_desc, has_photo=bool(ref_images))
+                url = draw(prompt=prompt, images=ref_images or None)
+            except Exception as e:
+                print(f"[page {i+1}] draw failed: {e}")
+                image_buffers.append(None)
+                continue
 
-            if page_err is not None:
+            # draw 成功，下载失败时用同一 URL 重试，不重新生成
+            try:
+                buf = download_image(url)
+                img_path.write_bytes(buf.getvalue())
+                image_buffers.append(buf)
+            except Exception as e:
+                print(f"[page {i+1}] download failed: {e}")
                 image_buffers.append(None)
 
         # ── Phase 5: Build PDF ──
