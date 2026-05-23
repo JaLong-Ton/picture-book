@@ -148,7 +148,11 @@ class JobStore:
             jid, stage, prog, title, fn, pdf, doc, err = row
             if stage in ("done", "error"):
                 continue
-            # Mark interrupted jobs
+            if stage == "outline_ready":
+                # Restore outline-ready jobs so user can still preview & generate
+                jobs[jid] = {"stage": "outline_ready", "progress": prog, "title": title or ""}
+                continue
+            # Mark other incomplete jobs as interrupted
             jobs[jid] = {"stage": "interrupted", "progress": prog, "title": title or ""}
             self._conn.execute(
                 "UPDATE jobs SET stage='interrupted', updated_at=? WHERE job_id=?",
@@ -194,14 +198,13 @@ def _run_cleanup_loop():
 job_store = JobStore()
 
 
-def process_job(job_id: str, doc_path: str, filename: str, photo_urls: list[str] | None = None):
-    """Background task: parse → outline → character sheets → images → PDF."""
+def parse_and_outline(job_id: str, doc_path: str, filename: str):
+    """Phase 1-2: parse document → generate outline. Stops at outline_ready."""
     job = jobs[job_id]
     job_dir = OUTPUT_DIR / job_id
     job_dir.mkdir(exist_ok=True)
 
     try:
-        # ── Phase 1: Document parsing ──
         job["stage"] = "parsing"
         job["progress"] = 5
         job_store.update(job_id, stage="parsing", progress=5)
@@ -209,25 +212,41 @@ def process_job(job_id: str, doc_path: str, filename: str, photo_urls: list[str]
         if not text.strip():
             raise ValueError("No text found in document.")
 
-        # ── Phase 2: Outline generation (with resume) ──
         outline_path = job_dir / "outline.json"
         if outline_path.exists():
             outline = json.loads(outline_path.read_text(encoding="utf-8"))
         else:
             job["stage"] = "outline"
-            job["progress"] = 10
-            job_store.update(job_id, stage="outline", progress=10)
+            job["progress"] = 30
+            job_store.update(job_id, stage="outline", progress=30)
             outline = generate_outline(text)
             outline_path.write_text(json.dumps(outline, ensure_ascii=False, indent=2), encoding="utf-8")
 
         job["title"] = outline.get("title", "My Picture Book")
         job["total_pages"] = len(outline.get("pages", []))
-        job_store.update(job_id, title=job["title"])
+        job["stage"] = "outline_ready"
+        job["progress"] = 100
+        job_store.update(job_id, stage="outline_ready", progress=100, title=job["title"])
 
+    except Exception as e:
+        job["stage"] = "error"
+        job["error"] = str(e)
+        job_store.update(job_id, stage="error", error=str(e))
+
+
+def generate_book(job_id: str, photo_urls: list[str] | None = None):
+    """Phase 3-5: character sheets → page images → PDF. Reads outline from disk."""
+    job = jobs[job_id]
+    job_dir = OUTPUT_DIR / job_id
+
+    try:
+        outline_path = job_dir / "outline.json"
+        outline = json.loads(outline_path.read_text(encoding="utf-8"))
         pages = outline.get("pages", [])
         characters = outline.get("characters", [])
+        job["title"] = outline.get("title", "My Picture Book")
+        job["total_pages"] = len(pages)
 
-        # Build character consistency description
         char_desc = build_character_description(characters)
 
         # ── Phase 3: Character reference sheets ──
@@ -237,7 +256,7 @@ def process_job(job_id: str, doc_path: str, filename: str, photo_urls: list[str]
             job_store.update(job_id, stage="character_sheets")
             for ci, char in enumerate(characters):
                 job["current_character"] = ci + 1
-                job["progress"] = 12 + int((ci / max(len(characters), 1)) * 5)
+                job["progress"] = int((ci / max(len(characters), 1)) * 10)
                 if not job.get("character_sheets") or ci >= len(job.get("character_sheets", [])):
                     sheet_prompt = build_character_sheet_prompt(char)
                     url = draw(prompt=sheet_prompt)
@@ -252,24 +271,21 @@ def process_job(job_id: str, doc_path: str, filename: str, photo_urls: list[str]
             job["current_page"] = i + 1
             if i == 0:
                 job_store.update(job_id, stage="generating_images")
-            job["progress"] = 20 + int((i / max(len(pages), 1)) * 60)
+            job["progress"] = 10 + int((i / max(len(pages), 1)) * 70)
 
             img_path = job_dir / f"page_{i}.png"
 
-            # Resume: skip already-generated pages
             if img_path.exists():
                 buf = BytesIO(img_path.read_bytes())
                 image_buffers.append(buf)
                 continue
 
-            # Generate with per-page retry (2 extra attempts)
             page_err = None
             for attempt in range(3):
                 try:
                     prompt = build_image_prompt(page, i + 1, char_desc, has_photo=bool(photo_urls))
                     url = draw(prompt=prompt, images=photo_urls if photo_urls else None)
                     buf = download_image(url)
-                    # Incremental save to disk
                     img_path.write_bytes(buf.getvalue())
                     image_buffers.append(buf)
                     page_err = None
@@ -280,7 +296,6 @@ def process_job(job_id: str, doc_path: str, filename: str, photo_urls: list[str]
                         time.sleep(2 * (attempt + 1))
 
             if page_err is not None:
-                # Page failed after retries — skip with None placeholder
                 image_buffers.append(None)
 
         # ── Phase 5: Build PDF ──
@@ -321,7 +336,10 @@ def upload():
         return jsonify({"error": "Only PDF, Word (.doc/.docx), and TXT files are supported"}), 400
 
     job_id = uuid.uuid4().hex[:12]
-    filename = secure_filename(file.filename) or f"document{ext}"
+    # secure_filename strips non-ASCII chars, so "后裔射日.docx" → "docx" (no dot).
+    # We only need the filename for extension detection in parse_document,
+    # so use job_id + original extension as the safe filename.
+    filename = f"{job_id}{ext}"
     doc_path = UPLOAD_DIR / f"{job_id}{ext}"
     file.save(str(doc_path))
 
@@ -343,11 +361,60 @@ def upload():
             photo_urls.append(f"data:{mime};base64,{b64}")
 
     job_store.create(job_id, str(doc_path))
+    # Store photo_urls in memory for later use by generate_book
+    jobs[job_id]["photo_urls"] = photo_urls
     threading.Thread(
-        target=process_job, args=(job_id, str(doc_path), filename, photo_urls), daemon=True
+        target=parse_and_outline, args=(job_id, str(doc_path), filename), daemon=True
     ).start()
 
     return jsonify({"job_id": job_id})
+
+
+@app.get("/api/outline/<job_id>")
+def get_outline(job_id):
+    job = job_store.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("stage") != "outline_ready":
+        return jsonify({"error": "Outline not ready"}), 400
+    outline_path = OUTPUT_DIR / job_id / "outline.json"
+    if not outline_path.exists():
+        return jsonify({"error": "Outline file not found"}), 404
+    return jsonify(json.loads(outline_path.read_text(encoding="utf-8")))
+
+
+@app.post("/api/outline/<job_id>")
+def save_outline(job_id):
+    job = job_store.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("stage") != "outline_ready":
+        return jsonify({"error": "Cannot edit outline in current stage"}), 400
+    data = request.get_json(silent=True)
+    if not data or "pages" not in data:
+        return jsonify({"error": "Invalid outline data"}), 400
+    outline_path = OUTPUT_DIR / job_id / "outline.json"
+    outline_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    job["title"] = data.get("title", job.get("title", ""))
+    job["total_pages"] = len(data.get("pages", []))
+    job_store.update(job_id, title=job["title"])
+    return jsonify({"ok": True})
+
+
+@app.post("/api/generate/<job_id>")
+def generate(job_id):
+    job = job_store.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job.get("stage") != "outline_ready":
+        return jsonify({"error": "Not ready to generate"}), 400
+    photo_urls = job.get("photo_urls", [])
+    job["progress"] = 0
+    job_store.update(job_id, stage="character_sheets", progress=0)
+    threading.Thread(
+        target=generate_book, args=(job_id, photo_urls), daemon=True
+    ).start()
+    return jsonify({"ok": True})
 
 
 @app.get("/api/status/<job_id>")
@@ -371,7 +438,7 @@ def stream(job_id):
             if snapshot != last:
                 yield f"data: {snapshot}\n\n"
                 last = snapshot
-            if job.get("stage") in ("done", "error"):
+            if job.get("stage") in ("done", "error", "outline_ready"):
                 return
             time.sleep(0.3)
 
