@@ -1,5 +1,8 @@
+import base64
 import json
 import os
+import shutil
+import sqlite3
 import time
 import uuid
 import threading
@@ -48,14 +51,24 @@ IMAGE_PROMPT_TEMPLATE = """你是一位专业的儿童绘本插画师。
 - 禁止风格突变"""
 
 
-def build_image_prompt(page: dict, page_num: int, character_desc: str = "") -> str:
-    return IMAGE_PROMPT_TEMPLATE.format(
+PHOTO_REFERENCE_BLOCK = """
+## 人物参考（重要）
+参考附带的人物照片，将照片中人物的面部特征、发型、肤色融入到绘本角色设计中。
+角色应保持迪士尼皮克斯 3D 动画风格，但要能辨认出是照片中的人物。
+照片中的人物应自然地出现在绘本场景中，与故事内容融为一体。"""
+
+
+def build_image_prompt(page: dict, page_num: int, character_desc: str = "", has_photo: bool = False) -> str:
+    prompt = IMAGE_PROMPT_TEMPLATE.format(
         page_num=page_num,
         title=page.get("title", ""),
         content=page.get("text", ""),
         scene=page.get("illustration", ""),
         character_block=character_desc,
     )
+    if has_photo:
+        prompt += PHOTO_REFERENCE_BLOCK
+    return prompt
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
@@ -67,7 +80,121 @@ app = Flask(__name__)
 jobs: dict[str, dict] = {}
 
 
-def process_job(job_id: str, doc_path: str, filename: str):
+# ---------------------------------------------------------------------------
+# Job persistence (SQLite) + auto-cleanup
+# ---------------------------------------------------------------------------
+class JobStore:
+    """Persists job state to SQLite; in-memory dict stays as fast cache."""
+
+    def __init__(self, db_path: str = "data/jobs.db"):
+        self._db_path = db_path
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id     TEXT PRIMARY KEY,
+                stage      TEXT NOT NULL DEFAULT 'starting',
+                progress   INTEGER DEFAULT 0,
+                title      TEXT,
+                filename   TEXT,
+                pdf_path   TEXT,
+                doc_path   TEXT,
+                error      TEXT,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+        self._conn.commit()
+
+    def create(self, job_id: str, doc_path: str):
+        now = time.time()
+        jobs[job_id] = {"stage": "starting", "progress": 0}
+        self._conn.execute(
+            "INSERT INTO jobs (job_id, stage, progress, doc_path, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (job_id, "starting", 0, doc_path, now, now),
+        )
+        self._conn.commit()
+
+    def update(self, job_id: str, **fields):
+        if not fields:
+            return
+        jobs.setdefault(job_id, {}).update(fields)
+        fields["updated_at"] = time.time()
+        set_clause = ", ".join(f"{k}=?" for k in fields)
+        self._conn.execute(
+            f"UPDATE jobs SET {set_clause} WHERE job_id=?",
+            (*fields.values(), job_id),
+        )
+        self._conn.commit()
+
+    def get(self, job_id: str) -> dict | None:
+        return jobs.get(job_id)
+
+    def snapshot(self, job: dict) -> dict:
+        keys = ("stage", "progress", "current_page", "total_pages",
+                "current_character", "total_characters", "title", "error")
+        resp = {k: job[k] for k in keys if k in job}
+        if job.get("stage") == "done":
+            resp["filename"] = job.get("filename", "book.pdf")
+        return resp
+
+    def load_existing(self):
+        """Restore jobs from SQLite into memory on startup."""
+        cur = self._conn.execute(
+            "SELECT job_id, stage, progress, title, filename, pdf_path, doc_path, error FROM jobs"
+        )
+        for row in cur.fetchall():
+            jid, stage, prog, title, fn, pdf, doc, err = row
+            if stage in ("done", "error"):
+                continue
+            # Mark interrupted jobs
+            jobs[jid] = {"stage": "interrupted", "progress": prog, "title": title or ""}
+            self._conn.execute(
+                "UPDATE jobs SET stage='interrupted', updated_at=? WHERE job_id=?",
+                (time.time(), jid),
+            )
+        self._conn.commit()
+
+    def cleanup(self, ttl_hours: float = 24):
+        cutoff = time.time() - ttl_hours * 3600
+        cur = self._conn.execute(
+            "SELECT job_id, doc_path, pdf_path FROM jobs WHERE created_at < ?", (cutoff,)
+        )
+        rows = cur.fetchall()
+        for jid, doc, pdf in rows:
+            for p in (doc, pdf):
+                if p:
+                    Path(p).unlink(missing_ok=True)
+            for d in (OUTPUT_DIR / jid, UPLOAD_DIR / jid):
+                if d.exists():
+                    shutil.rmtree(d, ignore_errors=True)
+            # Also remove the original upload file
+            for f in UPLOAD_DIR.glob(f"{jid}.*"):
+                f.unlink(missing_ok=True)
+            jobs.pop(jid, None)
+        if rows:
+            self._conn.execute("DELETE FROM jobs WHERE created_at < ?", (cutoff,))
+            self._conn.commit()
+        return len(rows)
+
+
+def _run_cleanup_loop():
+    ttl = float(os.environ.get("JOB_TTL_HOURS", "24"))
+    while True:
+        time.sleep(3600)
+        try:
+            n = job_store.cleanup(ttl)
+            if n:
+                print(f"[cleanup] removed {n} expired job(s)")
+        except Exception as e:
+            print(f"[cleanup] error: {e}")
+
+
+job_store = JobStore()
+
+
+def process_job(job_id: str, doc_path: str, filename: str, photo_urls: list[str] | None = None):
     """Background task: parse → outline → character sheets → images → PDF."""
     job = jobs[job_id]
     job_dir = OUTPUT_DIR / job_id
@@ -77,6 +204,7 @@ def process_job(job_id: str, doc_path: str, filename: str):
         # ── Phase 1: Document parsing ──
         job["stage"] = "parsing"
         job["progress"] = 5
+        job_store.update(job_id, stage="parsing", progress=5)
         text = parse_document(doc_path, filename)
         if not text.strip():
             raise ValueError("No text found in document.")
@@ -88,13 +216,16 @@ def process_job(job_id: str, doc_path: str, filename: str):
         else:
             job["stage"] = "outline"
             job["progress"] = 10
+            job_store.update(job_id, stage="outline", progress=10)
             outline = generate_outline(text)
             outline_path.write_text(json.dumps(outline, ensure_ascii=False, indent=2), encoding="utf-8")
 
+        job["title"] = outline.get("title", "My Picture Book")
+        job["total_pages"] = len(outline.get("pages", []))
+        job_store.update(job_id, title=job["title"])
+
         pages = outline.get("pages", [])
         characters = outline.get("characters", [])
-        job["title"] = outline.get("title", "My Picture Book")
-        job["total_pages"] = len(pages)
 
         # Build character consistency description
         char_desc = build_character_description(characters)
@@ -103,6 +234,7 @@ def process_job(job_id: str, doc_path: str, filename: str):
         if characters:
             job["stage"] = "character_sheets"
             job["total_characters"] = len(characters)
+            job_store.update(job_id, stage="character_sheets")
             for ci, char in enumerate(characters):
                 job["current_character"] = ci + 1
                 job["progress"] = 12 + int((ci / max(len(characters), 1)) * 5)
@@ -118,6 +250,8 @@ def process_job(job_id: str, doc_path: str, filename: str):
         for i, page in enumerate(pages):
             job["stage"] = "generating_images"
             job["current_page"] = i + 1
+            if i == 0:
+                job_store.update(job_id, stage="generating_images")
             job["progress"] = 20 + int((i / max(len(pages), 1)) * 60)
 
             img_path = job_dir / f"page_{i}.png"
@@ -132,8 +266,8 @@ def process_job(job_id: str, doc_path: str, filename: str):
             page_err = None
             for attempt in range(3):
                 try:
-                    prompt = build_image_prompt(page, i + 1, char_desc)
-                    url = draw(prompt=prompt)
+                    prompt = build_image_prompt(page, i + 1, char_desc, has_photo=bool(photo_urls))
+                    url = draw(prompt=prompt, images=photo_urls if photo_urls else None)
                     buf = download_image(url)
                     # Incremental save to disk
                     img_path.write_bytes(buf.getvalue())
@@ -152,6 +286,7 @@ def process_job(job_id: str, doc_path: str, filename: str):
         # ── Phase 5: Build PDF ──
         job["stage"] = "building_pdf"
         job["progress"] = 85
+        job_store.update(job_id, stage="building_pdf", progress=85)
         pdf_buf = build_pdf(job["title"], pages, image_buffers)
 
         pdf_out = job_dir / "book.pdf"
@@ -161,10 +296,13 @@ def process_job(job_id: str, doc_path: str, filename: str):
         job["progress"] = 100
         job["filename"] = f"{job['title']}.pdf"
         job["pdf_path"] = str(pdf_out)
+        job_store.update(job_id, stage="done", progress=100,
+                         filename=job["filename"], pdf_path=job["pdf_path"])
 
     except Exception as e:
         job["stage"] = "error"
         job["error"] = str(e)
+        job_store.update(job_id, stage="error", error=str(e))
 
 
 @app.get("/")
@@ -187,9 +325,25 @@ def upload():
     doc_path = UPLOAD_DIR / f"{job_id}{ext}"
     file.save(str(doc_path))
 
-    jobs[job_id] = {"stage": "starting", "progress": 0}
+    # Handle optional photo uploads
+    photo_urls = []
+    photos = request.files.getlist("photos")
+    if photos:
+        photo_dir = UPLOAD_DIR / job_id / "photos"
+        photo_dir.mkdir(parents=True, exist_ok=True)
+        for pf in photos:
+            if not pf or not pf.filename:
+                continue
+            photo_bytes = pf.read()
+            photo_path = photo_dir / secure_filename(pf.filename)
+            photo_path.write_bytes(photo_bytes)
+            b64 = base64.b64encode(photo_bytes).decode()
+            mime = pf.content_type or "image/jpeg"
+            photo_urls.append(f"data:{mime};base64,{b64}")
+
+    job_store.create(job_id, str(doc_path))
     threading.Thread(
-        target=process_job, args=(job_id, str(doc_path), filename), daemon=True
+        target=process_job, args=(job_id, str(doc_path), filename, photo_urls), daemon=True
     ).start()
 
     return jsonify({"job_id": job_id})
@@ -197,19 +351,10 @@ def upload():
 
 @app.get("/api/status/<job_id>")
 def status(job_id):
-    job = jobs.get(job_id)
+    job = job_store.get(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
-    return jsonify(_job_snapshot(job))
-
-
-def _job_snapshot(job: dict) -> dict:
-    keys = ("stage", "progress", "current_page", "total_pages",
-            "current_character", "total_characters", "title", "error")
-    resp = {k: job[k] for k in keys if k in job}
-    if job.get("stage") == "done":
-        resp["filename"] = job.get("filename", "book.pdf")
-    return resp
+    return jsonify(job_store.snapshot(job))
 
 
 @app.get("/api/stream/<job_id>")
@@ -217,11 +362,11 @@ def stream(job_id):
     def generate():
         last = ""
         while True:
-            job = jobs.get(job_id)
+            job = job_store.get(job_id)
             if not job:
                 yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
                 return
-            snapshot = json.dumps(_job_snapshot(job), ensure_ascii=False)
+            snapshot = json.dumps(job_store.snapshot(job), ensure_ascii=False)
             if snapshot != last:
                 yield f"data: {snapshot}\n\n"
                 last = snapshot
@@ -235,7 +380,7 @@ def stream(job_id):
 
 @app.get("/api/download/<job_id>")
 def download(job_id):
-    job = jobs.get(job_id)
+    job = job_store.get(job_id)
     if not job or job["stage"] != "done":
         return jsonify({"error": "Not ready"}), 404
 
@@ -248,5 +393,12 @@ def download(job_id):
 
 
 if __name__ == "__main__":
+    # Restore jobs from previous session
+    job_store.load_existing()
+
+    # Start background cleanup thread (default: purge jobs older than 24h)
+    cleanup_thread = threading.Thread(target=_run_cleanup_loop, daemon=True)
+    cleanup_thread.start()
+
     debug = os.environ.get("FLASK_DEBUG", "0").strip().lower() in ("1", "true", "yes")
     app.run(debug=debug, port=5000)
