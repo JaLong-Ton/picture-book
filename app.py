@@ -321,7 +321,7 @@ def upload():
         return jsonify({"error": "Only PDF, Word (.doc/.docx), and TXT files are supported"}), 400
 
     job_id = uuid.uuid4().hex[:12]
-    filename = secure_filename(file.filename)
+    filename = secure_filename(file.filename) or f"document{ext}"
     doc_path = UPLOAD_DIR / f"{job_id}{ext}"
     file.save(str(doc_path))
 
@@ -331,11 +331,12 @@ def upload():
     if photos:
         photo_dir = UPLOAD_DIR / job_id / "photos"
         photo_dir.mkdir(parents=True, exist_ok=True)
-        for pf in photos:
+        for pi, pf in enumerate(photos):
             if not pf or not pf.filename:
                 continue
             photo_bytes = pf.read()
-            photo_path = photo_dir / secure_filename(pf.filename)
+            photo_ext = Path(pf.filename).suffix.lower() or ".jpg"
+            photo_path = photo_dir / f"photo_{pi}{photo_ext}"
             photo_path.write_bytes(photo_bytes)
             b64 = base64.b64encode(photo_bytes).decode()
             mime = pf.content_type or "image/jpeg"
