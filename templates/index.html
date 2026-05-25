@@ -1,511 +1,745 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html class="light" lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 绘本生成器</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['"Noto Sans SC"', 'sans-serif'] },
-          colors: {
-            cream:  { 50: '#FFF9F0', 100: '#FFF3E0', 200: '#FFE4C4' },
-            coral:  { 400: '#FF8A65', 500: '#FF7043', 600: '#F4511E' },
-            peach:  { 100: '#FFE8E0', 200: '#FFCCBC', 300: '#FFAB91' },
-            sky:    { 100: '#E3F2FD', 200: '#BBDEFB', 400: '#42A5F5' },
-          }
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StoryPebble - AI 绘本生成器</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "surface-container-lowest": "#ffffff",
+          "background": "#fbf9f8",
+          "on-tertiary": "#ffffff",
+          "on-surface-variant": "#54433d",
+          "on-secondary": "#ffffff",
+          "surface-container": "#efeded",
+          "on-secondary-container": "#196f70",
+          "primary-container": "#ff9f7c",
+          "tertiary-container": "#c1b5ab",
+          "on-error": "#ffffff",
+          "surface-variant": "#e4e2e2",
+          "surface-container-low": "#f5f3f3",
+          "surface-tint": "#94492d",
+          "on-tertiary-fixed": "#211a14",
+          "on-secondary-fixed": "#002020",
+          "on-primary-fixed": "#380d00",
+          "error-container": "#ffdad6",
+          "secondary-fixed-dim": "#87d3d3",
+          "on-error-container": "#93000a",
+          "tertiary": "#665d54",
+          "inverse-surface": "#303030",
+          "surface-bright": "#fbf9f8",
+          "on-tertiary-container": "#4f473f",
+          "tertiary-fixed": "#eee0d5",
+          "on-secondary-fixed-variant": "#004f50",
+          "primary": "#94492d",
+          "on-primary-container": "#783419",
+          "surface-container-highest": "#e4e2e2",
+          "inverse-on-surface": "#f2f0f0",
+          "error": "#ba1a1a",
+          "secondary-container": "#a3f0f0",
+          "primary-fixed": "#ffdbcf",
+          "on-tertiary-fixed-variant": "#4e453e",
+          "surface-container-high": "#eae8e7",
+          "on-primary": "#ffffff",
+          "secondary-fixed": "#a3f0f0",
+          "tertiary-fixed-dim": "#d1c4ba",
+          "outline-variant": "#dac1b9",
+          "on-primary-fixed-variant": "#763218",
+          "on-background": "#1b1c1c",
+          "outline": "#87736c",
+          "on-surface": "#1b1c1c",
+          "inverse-primary": "#ffb59b",
+          "surface": "#fbf9f8",
+          "secondary": "#0d696a",
+          "surface-dim": "#dbd9d9",
+          "primary-fixed-dim": "#ffb59b"
+        },
+        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+        spacing: { gutter: "24px", "margin-desktop": "64px", "margin-mobile": "20px", unit: "8px", "container-max-width": "1100px" },
+        fontFamily: {
+          "headline-lg": ["Plus Jakarta Sans", "sans-serif"],
+          "headline-md": ["Plus Jakarta Sans", "sans-serif"],
+          "body-lg": ["Noto Sans SC", "sans-serif"],
+          "body-md": ["Noto Sans SC", "sans-serif"],
+          "label-md": ["Plus Jakarta Sans", "sans-serif"],
+          "label-sm": ["Plus Jakarta Sans", "sans-serif"]
+        },
+        fontSize: {
+          "headline-lg": ["40px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "700" }],
+          "headline-md": ["28px", { lineHeight: "1.3", fontWeight: "600" }],
+          "body-lg": ["18px", { lineHeight: "1.6", fontWeight: "400" }],
+          "body-md": ["16px", { lineHeight: "1.5", fontWeight: "400" }],
+          "label-md": ["14px", { lineHeight: "1.2", letterSpacing: "0.01em", fontWeight: "600" }],
+          "label-sm": ["12px", { lineHeight: "1.2", fontWeight: "500" }]
         }
       }
     }
-  </script>
-  <style>
-    body {
-      background: linear-gradient(170deg, #FFF9F0 0%, #FFE8D6 40%, #FFF0E6 70%, #FFF9F0 100%);
-      min-height: 100vh;
-    }
-    .card-warm {
-      background: rgba(255,255,255,0.85);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,200,170,0.3);
-      box-shadow: 0 4px 24px rgba(255,150,100,0.08);
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, #FF8A65, #FF7043);
-      transition: all 0.2s ease;
-    }
-    .btn-primary:hover:not(:disabled) {
-      background: linear-gradient(135deg, #FF7043, #F4511E);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(255,112,67,0.35);
-    }
-    .btn-primary:active:not(:disabled) { transform: translateY(0); }
-    .progress-warm {
-      background: linear-gradient(90deg, #FF8A65, #FFB74D, #FF7043);
-    }
-    .upload-zone {
-      border: 2px dashed #FFCCBC;
-      transition: all 0.25s ease;
-    }
-    .upload-zone:hover, .upload-zone.drag-active {
-      border-color: #FF8A65;
-      background: rgba(255,138,101,0.06);
-    }
-    @keyframes float-in {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .animate-float-in { animation: float-in 0.4s ease-out; }
-    @keyframes pulse-soft {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    .pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
-  </style>
+  }
+</script>
+<style>
+  body {
+    background-color: #FFF2E8;
+    color: #54433d;
+    overflow-x: hidden;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.5); }
+    50% { opacity: 0.8; transform: scale(1.2); }
+  }
+  @keyframes floatUp {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-100vh); }
+  }
+  .particle { filter: blur(1px); }
+  @keyframes blob-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(30px, -30px) scale(1.05); }
+  }
+  @keyframes blob-float-alt {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-30px, 40px) scale(0.95); }
+  }
+  .animate-blob { animation: blob-float 15s infinite ease-in-out; }
+  .animate-blob-alt { animation: blob-float-alt 18s infinite ease-in-out; }
+  .upload-dashed-border {
+    border: 2px dashed rgba(255, 181, 155, 0.4);
+    border-radius: 24px;
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: inset 0 0 30px rgba(255, 255, 255, 0.6), 0 10px 40px -10px rgba(148, 73, 45, 0.15);
+  }
+  .glass-card-step {
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.5), 0 10px 40px -10px rgba(148, 73, 45, 0.12);
+  }
+  .bg-blob {
+    position: absolute;
+    z-index: -1;
+    filter: blur(90px);
+    opacity: 0.5;
+    border-radius: 9999px;
+  }
+  .text-glow {
+    text-shadow: 0 0 20px rgba(255, 181, 155, 0.8), 0 0 40px rgba(255, 181, 155, 0.4);
+  }
+  .icon-glow { filter: drop-shadow(0 0 12px currentColor); }
+  @keyframes float-element {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  .animate-float-element { animation: float-element 6s ease-in-out infinite; }
+  .animate-float-element-delayed { animation: float-element 7s ease-in-out 3s infinite; }
+
+  /* Sidebar */
+  .sidebar-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.25);
+    z-index: 40; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .sidebar-backdrop.active { opacity: 1; pointer-events: auto; }
+  .sidebar-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 440px; max-width: 100vw; z-index: 50;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(16px);
+    border-left: 1px solid rgba(255,200,170,0.3);
+    box-shadow: -4px 0 32px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column;
+  }
+  .sidebar-panel.open { transform: translateX(0); }
+  @media (max-width: 639px) {
+    .sidebar-panel { width: 100vw; border-left: none; }
+  }
+
+  /* Progress bar */
+  .progress-warm {
+    background: linear-gradient(90deg, #FF8A65, #FFB74D, #FF7043);
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  .pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+</style>
 </head>
-<body class="font-sans text-stone-800">
-  <div class="max-w-2xl mx-auto px-5 py-10 sm:py-14">
+<body class="antialiased min-h-screen flex flex-col relative">
+<!-- Background Blobs -->
+<div class="fixed inset-0 overflow-hidden pointer-events-none z-[-2]">
+  <div class="bg-blob w-[600px] h-[600px] bg-[#ffdbcf] top-[-100px] right-[-100px] animate-blob"></div>
+  <div class="bg-blob w-[700px] h-[700px] bg-[#a3f0f0] bottom-[-10%] left-[-200px] animate-blob-alt"></div>
+  <div class="bg-blob w-[500px] h-[500px] bg-[#eee0d5] top-[30%] right-[10%] animate-blob"></div>
+  <div class="bg-blob w-[550px] h-[550px] bg-[#fbcfe8] top-[20%] left-[5%] animate-blob-alt" style="animation-delay: -5s;"></div>
+  <div class="bg-blob w-[450px] h-[450px] bg-[#e9d5ff] bottom-[20%] right-[5%] animate-blob" style="animation-delay: -8s;"></div>
+</div>
+<!-- Particles -->
+<div class="fixed inset-0 pointer-events-none z-[-1]" id="particles"></div>
 
-    <!-- Header -->
-    <div class="text-center mb-10">
-      <div class="text-5xl mb-3">📚</div>
-      <h1 class="text-3xl sm:text-4xl font-bold text-stone-800 mb-2">AI 绘本生成器</h1>
-      <p class="text-stone-500 text-sm sm:text-base">上传一份文档，AI 为你的故事画出精彩插图</p>
-    </div>
-
-    <!-- Upload Area -->
-    <div id="upload-card" class="card-warm rounded-3xl p-6 sm:p-8 text-center animate-float-in">
-      <label for="file-input" class="cursor-pointer block upload-zone rounded-2xl p-8 sm:p-10">
-        <div class="text-4xl mb-3">✨</div>
-        <p class="text-stone-700 font-semibold mb-1">拖拽或点击上传文档</p>
-        <p class="text-sm text-stone-400">支持 PDF / Word / TXT 格式</p>
-        <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt" class="hidden">
-      </label>
-      <div id="file-info" class="hidden mt-4 py-2 px-4 bg-cream-100 rounded-xl text-sm text-stone-600 inline-flex items-center gap-2">
-        <span>📎</span>
-        <span id="file-name"></span>
-        <button id="clear-file" class="ml-1 text-stone-400 hover:text-stone-600 transition-colors">&times;</button>
+<!-- TopNavBar -->
+<nav class="w-full top-0 bg-white/50 backdrop-blur-2xl shadow-sm sticky z-50 border-b border-white/40">
+  <div class="max-w-[1100px] mx-auto px-5 md:px-16 flex justify-between items-center h-20">
+    <div class="flex items-center gap-8">
+      <a class="font-headline-md text-headline-md text-primary text-glow" href="#">StoryPebble</a>
+      <div class="hidden md:flex items-center gap-6">
+        <a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md" href="#">首页</a>
+        <a class="text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md" href="#how-it-works">使用方法</a>
+        <a class="text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md" href="#gallery">作品展示</a>
       </div>
     </div>
+    <div class="flex items-center gap-4">
+      <button class="font-label-md text-label-md text-primary hover:opacity-80 transition-opacity px-4 py-2">登录</button>
+    </div>
+  </div>
+</nav>
 
-    <!-- Photo Upload Area (optional) -->
-    <div id="photo-card" class="card-warm rounded-3xl p-6 sm:p-8 mt-4 text-center animate-float-in" style="animation-delay:0.1s">
-      <label for="photo-input" class="cursor-pointer block upload-zone rounded-2xl p-6 sm:p-8">
-        <div class="text-3xl mb-2">📷</div>
-        <p class="text-stone-700 font-medium mb-1">上传人物照片（可选）</p>
-        <p class="text-sm text-stone-400">AI 会将照片中的人物融入绘本插图</p>
-        <input id="photo-input" type="file" accept=".jpg,.jpeg,.png,.webp" multiple class="hidden">
-      </label>
-      <div id="photo-preview" class="hidden mt-4 flex flex-wrap gap-3 justify-center"></div>
+<!-- Main Content -->
+<main class="flex-grow flex flex-col items-center w-full max-w-[1100px] mx-auto px-5 md:px-16 py-12 md:py-24 space-y-24">
+
+  <!-- Hero & Upload Section -->
+  <section class="w-full max-w-3xl flex flex-col items-center text-center space-y-12 z-10">
+    <div class="space-y-4 flex flex-col items-center">
+      <div class="w-16 h-16 mb-4 animate-float-element">
+        <svg class="icon-glow" fill="none" viewbox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <rect fill="#ffb59b" height="28" rx="2" width="20" x="28" y="12"></rect>
+          <rect fill="#0d696a" height="28" rx="2" width="20" x="20" y="16"></rect>
+          <rect fill="#94492d" height="28" rx="2" width="20" x="12" y="20"></rect>
+        </svg>
+      </div>
+      <h1 class="font-headline-lg text-headline-lg text-on-surface text-glow">AI 绘本生成器</h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant">上传一份文档，AI 为你的故事画出精彩插图</p>
     </div>
 
-    <!-- Outline Preview Card -->
-    <div id="outline-card" class="hidden card-warm rounded-3xl p-6 sm:p-8 mt-6 animate-float-in">
-      <h2 class="text-lg font-bold text-stone-800 mb-1">📖 大纲预览</h2>
-      <p class="text-sm text-stone-400 mb-5">确认内容无误后点击「生成绘本」，也可以直接编辑修改</p>
-
-      <!-- Title -->
-      <div class="mb-5">
-        <label class="block text-xs font-semibold text-stone-500 mb-1.5">绘本标题</label>
-        <input id="outline-title" type="text"
-          class="w-full px-4 py-2.5 border border-peach-200 rounded-xl text-stone-800 font-semibold bg-cream-50 focus:ring-2 focus:ring-coral-400/40 focus:border-coral-400 outline-none transition-all">
+    <!-- Upload Cards -->
+    <div class="w-full space-y-6">
+      <!-- Document Upload -->
+      <div class="glass-card rounded-[32px] p-2 animate-float-element">
+        <label for="file-input" class="upload-dashed-border flex flex-col items-center justify-center py-16 px-6 cursor-pointer hover:bg-white/50 transition-colors">
+          <span class="material-symbols-outlined text-4xl text-primary-container mb-4 icon-glow" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+          <h3 class="font-headline-md text-[20px] md:text-[24px] text-on-surface mb-2">拖拽或点击上传文档</h3>
+          <p class="font-body-md text-body-md text-outline">支持 PDF / Word / TXT 格式</p>
+          <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt" class="hidden">
+        </label>
+        <div id="file-info" class="hidden mt-3 mx-4 mb-4 py-2 px-4 bg-primary-fixed/30 rounded-xl text-sm text-on-surface-variant inline-flex items-center gap-2">
+          <span class="material-symbols-outlined text-base">attach_file</span>
+          <span id="file-name"></span>
+          <button id="clear-file" class="ml-1 text-outline hover:text-on-surface transition-colors">&times;</button>
+        </div>
       </div>
 
-      <!-- Characters -->
-      <div id="outline-characters" class="mb-5"></div>
-
-      <!-- Pages -->
-      <div id="outline-pages" class="space-y-4 mb-6"></div>
-
-      <!-- Actions -->
-      <div class="flex gap-3 justify-end">
-        <button onclick="resetUI()" class="px-5 py-2.5 border border-stone-300 text-stone-600 rounded-xl hover:bg-stone-100 transition-colors text-sm font-medium">
-          重新上传
-        </button>
-        <button id="generate-btn" onclick="saveAndGenerate()" class="btn-primary px-8 py-2.5 text-white rounded-xl font-semibold shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-          ✨ 生成绘本
-        </button>
-      </div>
-    </div>
-
-    <!-- Progress Card -->
-    <div id="progress-card" class="hidden card-warm rounded-3xl p-6 sm:p-8 mt-6">
-      <h2 id="progress-title" class="text-lg font-bold text-stone-800 mb-4"></h2>
-      <div class="w-full bg-cream-200 rounded-full h-3 mb-3 overflow-hidden">
-        <div id="progress-bar" class="progress-warm h-3 rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
-      </div>
-      <p id="progress-text" class="text-sm text-stone-500"></p>
-      <p id="progress-page" class="text-sm text-stone-400 mt-1 pulse-soft"></p>
-    </div>
-
-    <!-- Error Card -->
-    <div id="error-card" class="hidden rounded-3xl p-6 mt-6 bg-red-50 border border-red-200 animate-float-in">
-      <p class="text-red-700 font-semibold">出错了</p>
-      <p id="error-text" class="text-red-600 text-sm mt-1"></p>
-      <div class="mt-3 flex gap-2">
-        <button id="retry-btn" onclick="retryGeneration()" class="hidden px-4 py-2 btn-primary text-white rounded-xl text-sm">重试生成</button>
-        <button onclick="resetUI()" class="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-sm hover:bg-red-200 transition-colors">重新开始</button>
+      <!-- Photo Upload -->
+      <div class="glass-card rounded-[32px] p-2 animate-float-element-delayed">
+        <label for="photo-input" class="upload-dashed-border flex flex-col items-center justify-center py-12 px-6 cursor-pointer hover:bg-white/50 transition-colors">
+          <span class="material-symbols-outlined text-4xl text-tertiary-container mb-4 icon-glow" style="font-variation-settings: 'FILL' 1;">photo_camera</span>
+          <h3 class="font-headline-md text-[18px] md:text-[20px] text-on-surface mb-2">上传人物照片（可选）</h3>
+          <p class="font-body-md text-body-md text-outline">AI 会将照片中的人物融入绘本插图</p>
+          <input id="photo-input" type="file" accept=".jpg,.jpeg,.png,.webp" multiple class="hidden">
+        </label>
+        <div id="photo-preview" class="hidden mt-3 mx-4 mb-4 flex flex-wrap gap-3 justify-center"></div>
       </div>
     </div>
+  </section>
 
-    <!-- Result Card -->
-    <div id="result-card" class="hidden card-warm rounded-3xl p-8 mt-6 text-center animate-float-in">
-      <div class="text-5xl mb-3">🎉</div>
-      <h2 id="result-title" class="text-xl font-bold text-stone-800 mb-2"></h2>
-      <p class="text-stone-500 mb-6">绘本已生成，点击下方按钮下载</p>
-      <a id="download-btn" href="#" class="btn-primary inline-block px-10 py-3 text-white rounded-2xl font-semibold shadow-md">
-        📥 下载绘本 PDF
-      </a>
-      <button onclick="resetUI()" class="mt-5 block mx-auto px-4 py-2 text-sm text-stone-400 hover:text-stone-600 transition-colors">重新制作一本</button>
+  <!-- Progress Card (hidden by default) -->
+  <div id="progress-card" class="hidden w-full max-w-3xl glass-card rounded-[32px] p-8 z-10">
+    <h2 id="progress-title" class="font-headline-md text-[20px] text-on-surface mb-4"></h2>
+    <div class="w-full bg-surface-container rounded-full h-3 mb-3 overflow-hidden">
+      <div id="progress-bar" class="progress-warm h-3 rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+    </div>
+    <p id="progress-text" class="font-body-md text-body-md text-on-surface-variant"></p>
+    <p id="progress-page" class="font-body-md text-sm text-outline mt-1 pulse-soft"></p>
+  </div>
+
+  <!-- Error Card (hidden by default) -->
+  <div id="error-card" class="hidden w-full max-w-3xl rounded-[32px] p-8 bg-error-container/30 border border-error/20 z-10">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="material-symbols-outlined text-error">error</span>
+      <p class="text-error font-semibold">出错了</p>
+    </div>
+    <p id="error-text" class="text-on-error-container text-sm mb-3"></p>
+    <div class="flex gap-2">
+      <button id="retry-btn" onclick="retryGeneration()" class="hidden px-5 py-2 bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md rounded-full hover:opacity-90 transition-opacity">重试生成</button>
+      <button onclick="resetUI()" class="px-5 py-2 bg-error-container text-on-error-container font-label-md text-label-md rounded-full hover:opacity-80 transition-opacity">重新开始</button>
     </div>
   </div>
 
-  <script>
-    let jobId = null;
-    let evtSource = null;
-    let photoFiles = [];
+  <!-- Result Card (hidden by default) -->
+  <div id="result-card" class="hidden w-full max-w-3xl glass-card rounded-[32px] p-10 text-center z-10">
+    <span class="material-symbols-outlined text-5xl text-primary-container mb-4 icon-glow" style="font-variation-settings: 'FILL' 1;">celebration</span>
+    <h2 id="result-title" class="font-headline-md text-headline-md text-on-surface mb-2"></h2>
+    <p class="font-body-md text-body-md text-on-surface-variant mb-8">绘本已生成，点击下方按钮下载</p>
+    <a id="download-btn" href="#" class="inline-block bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md px-12 py-4 rounded-full shadow-[0_0_20px_rgba(148,73,45,0.4)] hover:shadow-[0_0_30px_rgba(148,73,45,0.6)] hover:opacity-90 active:scale-95 transition-all">
+      <span class="material-symbols-outlined align-middle mr-1" style="font-size:20px;">download</span> 下载绘本 PDF
+    </a>
+    <button onclick="resetUI()" class="mt-6 block mx-auto font-body-md text-sm text-outline hover:text-on-surface transition-colors">重新制作一本</button>
+  </div>
 
-    const stageLabels = {
-      starting: "准备中…",
-      parsing: "正在解析文档…",
-      outline: "AI 正在构思绘本大纲…",
-      outline_ready: "大纲已生成，请确认",
-      character_sheets: "AI 正在绘制角色设定图…",
-      generating_images: "AI 正在绘制绘本插图…",
-      building_pdf: "正在合成 PDF 绘本…",
-      done: "完成！",
-    };
+  <!-- How it Works Section -->
+  <section class="w-full py-16 flex flex-col items-center z-10" id="how-it-works">
+    <h2 class="font-headline-md text-headline-md text-on-surface mb-12 text-glow">它是如何工作的？</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+      <div class="glass-card-step rounded-xl p-8 flex flex-col items-center text-center relative animate-float-element">
+        <div class="w-16 h-16 bg-primary-fixed rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(255,219,207,0.8)]">
+          <span class="material-symbols-outlined text-primary text-3xl icon-glow">upload_file</span>
+        </div>
+        <h3 class="font-label-md text-[18px] text-on-surface mb-2">1. 上传文档</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant">上传你的故事文稿，支持 PDF、Word、TXT 格式。</p>
+      </div>
+      <div class="glass-card-step rounded-xl p-8 flex flex-col items-center text-center relative animate-float-element" style="animation-delay: 1s;">
+        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-outline-variant/50"></div>
+        <div class="w-16 h-16 bg-secondary-fixed rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(163,240,240,0.8)]">
+          <span class="material-symbols-outlined text-secondary text-3xl icon-glow">draw</span>
+        </div>
+        <h3 class="font-label-md text-[18px] text-on-surface mb-2">2. AI 创作</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant">AI 自动分镜并生成精美的绘本插画。</p>
+      </div>
+      <div class="glass-card-step rounded-xl p-8 flex flex-col items-center text-center relative animate-float-element" style="animation-delay: 2s;">
+        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-outline-variant/50"></div>
+        <div class="w-16 h-16 bg-tertiary-fixed rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(238,224,213,0.8)]">
+          <span class="material-symbols-outlined text-tertiary text-3xl icon-glow">download</span>
+        </div>
+        <h3 class="font-label-md text-[18px] text-on-surface mb-2">3. 下载绘本</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant">预览、微调后，下载完整的 PDF 绘本。</p>
+      </div>
+    </div>
+  </section>
 
-    function show(id) { document.getElementById(id).classList.remove('hidden'); }
-    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+  <!-- Gallery Section (placeholder) -->
+  <section class="w-full py-16 flex flex-col items-center z-10" id="gallery">
+    <h2 class="font-headline-md text-headline-md text-on-surface mb-12 text-glow">作品展示</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+      <div class="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface-container cursor-pointer shadow-[0_10px_40px_-10px_rgba(148,73,45,0.2)] border border-white/40">
+        <div class="w-full h-full bg-gradient-to-br from-primary-fixed to-secondary-container flex items-center justify-center">
+          <span class="material-symbols-outlined text-6xl text-primary/30" style="font-variation-settings: 'FILL' 1;">auto_stories</span>
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
+          <h4 class="font-label-md text-[18px] text-surface-container-lowest mb-1">示例绘本 1</h4>
+          <p class="font-body-md text-[14px] text-surface-container-lowest/80">即将上线</p>
+        </div>
+      </div>
+      <div class="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface-container cursor-pointer shadow-[0_10px_40px_-10px_rgba(148,73,45,0.2)] border border-white/40">
+        <div class="w-full h-full bg-gradient-to-br from-secondary-fixed to-primary-fixed flex items-center justify-center">
+          <span class="material-symbols-outlined text-6xl text-secondary/30" style="font-variation-settings: 'FILL' 1;">menu_book</span>
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
+          <h4 class="font-label-md text-[18px] text-surface-container-lowest mb-1">示例绘本 2</h4>
+          <p class="font-body-md text-[14px] text-surface-container-lowest/80">即将上线</p>
+        </div>
+      </div>
+      <div class="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface-container cursor-pointer hidden md:block shadow-[0_10px_40px_-10px_rgba(148,73,45,0.2)] border border-white/40">
+        <div class="w-full h-full bg-gradient-to-br from-tertiary-fixed to-secondary-container flex items-center justify-center">
+          <span class="material-symbols-outlined text-6xl text-tertiary/30" style="font-variation-settings: 'FILL' 1;">photo_album</span>
+        </div>
+        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
+          <h4 class="font-label-md text-[18px] text-surface-container-lowest mb-1">示例绘本 3</h4>
+          <p class="font-body-md text-[14px] text-surface-container-lowest/80">即将上线</p>
+        </div>
+      </div>
+    </div>
+    <button class="mt-12 text-primary font-label-md text-label-md flex items-center gap-2 hover:opacity-80 transition-opacity text-glow">
+      查看更多作品 <span class="material-symbols-outlined icon-glow">arrow_forward</span>
+    </button>
+  </section>
+</main>
 
-    const fileInput = document.getElementById('file-input');
-    const fileInfo = document.getElementById('file-info');
-    const fileName = document.getElementById('file-name');
+<!-- Outline Sidebar -->
+<div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+<div id="outline-sidebar" class="sidebar-panel">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/30 shrink-0">
+    <h2 class="font-headline-md text-[20px] text-on-surface">大纲预览</h2>
+    <button onclick="toggleSidebar(false)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container transition-colors text-outline text-xl leading-none">&times;</button>
+  </div>
+  <div class="flex-1 overflow-y-auto px-6 py-5">
+    <p class="font-body-md text-sm text-outline mb-5">确认内容无误后点击「生成绘本」，也可以直接编辑修改</p>
+    <div class="mb-5">
+      <label class="block text-xs font-semibold text-on-surface-variant mb-1.5">绘本标题</label>
+      <input id="outline-title" type="text" class="w-full px-4 py-2.5 border border-outline-variant rounded-xl text-on-surface font-semibold bg-surface-container-low focus:ring-2 focus:ring-primary-container/40 focus:border-primary outline-none transition-all">
+    </div>
+    <div id="outline-characters" class="mb-5"></div>
+    <div id="outline-pages" class="space-y-4 mb-6"></div>
+  </div>
+  <div class="px-6 py-4 border-t border-outline-variant/30 flex gap-3 justify-end shrink-0">
+    <button onclick="resetUI()" class="px-5 py-2.5 border border-outline-variant text-on-surface-variant rounded-xl hover:bg-surface-container transition-colors text-sm font-medium">重新上传</button>
+    <button id="generate-btn" onclick="saveAndGenerate()" class="bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md px-8 py-3 rounded-full shadow-[0_0_20px_rgba(148,73,45,0.4)] hover:shadow-[0_0_30px_rgba(148,73,45,0.6)] hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+      <span class="material-symbols-outlined align-middle mr-1" style="font-size:18px;">auto_awesome</span> 生成绘本
+    </button>
+  </div>
+</div>
 
-    fileInput.addEventListener('change', () => {
-      const f = fileInput.files[0];
-      if (!f) return;
-      fileName.textContent = f.name;
-      show('file-info');
-      uploadFile(f);
-    });
+<!-- Footer -->
+<footer class="w-full rounded-t-[32px] bg-white/40 backdrop-blur-xl border-t border-white/60 mt-auto z-10 shadow-[inset_0_20px_40px_rgba(255,255,255,0.3)]">
+  <div class="max-w-[1100px] mx-auto px-16 py-12 flex flex-col md:flex-row justify-between items-center gap-8">
+    <div class="font-headline-md text-headline-md text-primary text-glow">StoryPebble</div>
+    <div class="flex flex-wrap justify-center gap-6">
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">联系我们</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">隐私政策</a>
+      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">使用条款</a>
+    </div>
+    <div class="font-body-md text-body-md text-secondary/80">&copy; 2024 StoryPebble. 用 AI 点亮每一个故事。</div>
+  </div>
+</footer>
 
-    document.getElementById('clear-file').addEventListener('click', () => {
-      fileInput.value = '';
-      hide('file-info');
-    });
+<script>
+  // Particle Generation
+  const particlesContainer = document.getElementById('particles');
+  for (let i = 0; i < 40; i++) {
+    let p = document.createElement('div');
+    p.className = 'absolute bg-white rounded-full opacity-0 particle';
+    let size = Math.random() * 4 + 1;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.top = Math.random() * 100 + 'vh';
+    let twinkleDuration = Math.random() * 4 + 2;
+    let twinkleDelay = Math.random() * 5;
+    let floatDuration = Math.random() * 15 + 15;
+    p.style.animation = `twinkle ${twinkleDuration}s infinite ${twinkleDelay}s linear, floatUp ${floatDuration}s infinite linear`;
+    p.style.boxShadow = '0 0 ' + (size * 2) + 'px rgba(255,255,255,0.9)';
+    particlesContainer.appendChild(p);
+  }
 
-    // Photo upload
-    const photoInput = document.getElementById('photo-input');
-    const photoPreview = document.getElementById('photo-preview');
+  // App Logic
+  let jobId = null;
+  let evtSource = null;
+  let photoFiles = [];
 
-    photoInput.addEventListener('change', () => {
-      for (const f of photoInput.files) {
-        if (!photoFiles.some(p => p.name === f.name && p.size === f.size)) {
-          photoFiles.push(f);
-        }
+  const stageLabels = {
+    starting: "准备中…",
+    parsing: "正在解析文档…",
+    outline: "AI 正在构思绘本大纲…",
+    outline_ready: "大纲已生成，请确认",
+    character_sheets: "AI 正在绘制角色设定图…",
+    generating_images: "AI 正在绘制绘本插图…",
+    building_pdf: "正在合成 PDF 绘本…",
+    done: "完成！",
+  };
+
+  function show(id) { document.getElementById(id).classList.remove('hidden'); }
+  function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+  function toggleSidebar(open) {
+    document.getElementById('outline-sidebar').classList.toggle('open', open);
+    document.getElementById('sidebar-backdrop').classList.toggle('active', open);
+    document.body.style.overflow = open ? 'hidden' : '';
+  }
+
+  const fileInput = document.getElementById('file-input');
+  const fileInfo = document.getElementById('file-info');
+  const fileName = document.getElementById('file-name');
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    fileName.textContent = f.name;
+    show('file-info');
+    uploadFile(f);
+  });
+
+  document.getElementById('clear-file').addEventListener('click', () => {
+    fileInput.value = '';
+    hide('file-info');
+  });
+
+  const photoInput = document.getElementById('photo-input');
+  const photoPreview = document.getElementById('photo-preview');
+
+  photoInput.addEventListener('change', () => {
+    for (const f of photoInput.files) {
+      if (!photoFiles.some(p => p.name === f.name && p.size === f.size)) {
+        photoFiles.push(f);
       }
-      photoInput.value = '';
-      renderPhotos();
-    });
+    }
+    photoInput.value = '';
+    renderPhotos();
+  });
 
-    function renderPhotos() {
-      if (photoFiles.length === 0) {
-        photoPreview.classList.add('hidden');
-        photoPreview.innerHTML = '';
-        return;
-      }
-      photoPreview.classList.remove('hidden');
+  function renderPhotos() {
+    if (photoFiles.length === 0) {
+      photoPreview.classList.add('hidden');
       photoPreview.innerHTML = '';
-      photoFiles.forEach((f, idx) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'relative group';
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(f);
-        img.className = 'w-20 h-20 object-cover rounded-xl border-2 border-peach-200 shadow-sm';
-        const btn = document.createElement('button');
-        btn.innerHTML = '&times;';
-        btn.className = 'absolute -top-2 -right-2 w-5 h-5 bg-coral-500 text-white rounded-full text-xs flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow';
-        btn.onclick = () => { photoFiles.splice(idx, 1); renderPhotos(); };
-        wrap.appendChild(img);
-        wrap.appendChild(btn);
-        photoPreview.appendChild(wrap);
-      });
+      return;
+    }
+    photoPreview.classList.remove('hidden');
+    photoPreview.innerHTML = '';
+    photoFiles.forEach((f, idx) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'relative group';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(f);
+      img.className = 'w-20 h-20 object-cover rounded-xl border-2 border-outline-variant shadow-sm';
+      const btn = document.createElement('button');
+      btn.innerHTML = '&times;';
+      btn.className = 'absolute -top-2 -right-2 w-5 h-5 bg-error text-on-error rounded-full text-xs flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow';
+      btn.onclick = () => { photoFiles.splice(idx, 1); renderPhotos(); };
+      wrap.appendChild(img);
+      wrap.appendChild(btn);
+      photoPreview.appendChild(wrap);
+    });
+  }
+
+  // Drag and drop
+  const dropZone = document.querySelector('label[for="file-input"]');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('bg-white/50'); });
+  dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('bg-white/50'); });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('bg-white/50');
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    fileInput.files = e.dataTransfer.files;
+    fileName.textContent = f.name;
+    show('file-info');
+    uploadFile(f);
+  });
+
+  async function uploadFile(file) {
+    hide('result-card');
+    hide('error-card');
+    toggleSidebar(false);
+    const formData = new FormData();
+    formData.append('file', file);
+    for (const p of photoFiles) { formData.append('photos', p); }
+
+    try {
+      const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await resp.json();
+      if (data.error) { showError(data.error); return; }
+      jobId = data.job_id;
+      localStorage.setItem('pb_job_id', jobId);
+      show('progress-card');
+      document.getElementById('progress-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById('progress-title').textContent = '正在解析文档…';
+      startSSE(jobId);
+    } catch (e) {
+      showError('上传失败：' + e.message);
+    }
+  }
+
+  function startSSE(id) {
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    evtSource = new EventSource('/api/stream/' + id);
+    evtSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.error) { showError(data.error); evtSource.close(); return; }
+      updateProgress(data);
+    };
+    evtSource.onerror = () => {
+      setTimeout(() => {
+        if (evtSource && evtSource.readyState === EventSource.CLOSED) { evtSource = null; }
+      }, 5000);
+    };
+  }
+
+  function updateProgress(data) {
+    if (data.stage === 'outline_ready') {
+      if (evtSource) { evtSource.close(); evtSource = null; }
+      hide('progress-card');
+      loadOutline(jobId);
+      return;
     }
 
-    const dropZone = document.querySelector('label[for="file-input"]');
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-active'); });
-    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-active'); });
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('drag-active');
-      const f = e.dataTransfer.files[0];
-      if (!f) return;
-      fileInput.files = e.dataTransfer.files;
-      fileName.textContent = f.name;
-      show('file-info');
-      uploadFile(f);
+    const bar = document.getElementById('progress-bar');
+    bar.style.width = (data.progress || 0) + '%';
+    document.getElementById('progress-text').textContent = stageLabels[data.stage] || data.stage;
+
+    if (data.stage === 'generating_images') {
+      document.getElementById('progress-page').textContent = `正在绘制第 ${data.current_page || 1}/${data.total_pages || '?'} 页…`;
+    } else if (data.stage === 'character_sheets') {
+      document.getElementById('progress-page').textContent = `正在绘制第 ${data.current_character || 1}/${data.total_characters || '?'} 个角色…`;
+    } else {
+      document.getElementById('progress-page').textContent = '';
+    }
+
+    if (data.stage === 'done') {
+      if (evtSource) { evtSource.close(); evtSource = null; }
+      localStorage.removeItem('pb_job_id');
+      hide('progress-card');
+      show('result-card');
+      document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
+      document.getElementById('download-btn').href = '/api/download/' + jobId;
+    }
+
+    if (data.stage === 'error') {
+      if (evtSource) { evtSource.close(); evtSource = null; }
+      localStorage.removeItem('pb_job_id');
+      showError(data.error, !!data.total_pages);
+    }
+  }
+
+  async function loadOutline(id) {
+    try {
+      const resp = await fetch('/api/outline/' + id);
+      const data = await resp.json();
+      if (data.error) { showError(data.error); return; }
+      renderOutline(data);
+      toggleSidebar(true);
+    } catch (e) {
+      showError('加载大纲失败：' + e.message);
+    }
+  }
+
+  function renderOutline(outline) {
+    document.getElementById('outline-title').value = outline.title || '';
+
+    const charDiv = document.getElementById('outline-characters');
+    const chars = outline.characters || [];
+    if (chars.length > 0) {
+      charDiv.innerHTML = '<label class="block text-xs font-semibold text-on-surface-variant mb-2">角色设定</label>' +
+        '<div class="flex flex-wrap gap-2">' +
+        chars.map(c => `<span class="px-3 py-1.5 bg-primary-fixed text-on-primary-container rounded-xl text-sm font-medium">${esc(c.name || '')}（${esc(c.species || '')}）</span>`).join('') +
+        '</div>';
+    } else {
+      charDiv.innerHTML = '';
+    }
+
+    const pagesDiv = document.getElementById('outline-pages');
+    const pages = outline.pages || [];
+    pagesDiv.innerHTML = pages.map((p, i) => `
+      <div class="border border-outline-variant/40 rounded-2xl p-4 bg-surface-container-low">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-7 h-7 bg-primary text-on-primary rounded-full text-xs font-bold flex items-center justify-center shadow-sm">${i + 1}</span>
+          <input type="text" value="${esc(p.title || '')}" data-page="${i}" data-field="title"
+            class="flex-1 px-3 py-1.5 border border-outline-variant/40 rounded-lg text-sm font-semibold text-on-surface bg-white focus:ring-2 focus:ring-primary-container/40 focus:border-primary outline-none transition-all">
+        </div>
+        <textarea data-page="${i}" data-field="text" rows="2"
+          class="w-full px-3 py-2.5 border border-outline-variant/40 rounded-xl text-sm text-on-surface-variant bg-white resize-none focus:ring-2 focus:ring-primary-container/40 focus:border-primary outline-none transition-all">${esc(p.text || p.key_content || '')}</textarea>
+      </div>
+    `).join('');
+  }
+
+  async function saveAndGenerate() {
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+
+    const title = document.getElementById('outline-title').value;
+    const pageEls = document.querySelectorAll('#outline-pages [data-page]');
+    const pagesMap = {};
+    pageEls.forEach(el => {
+      const idx = el.dataset.page;
+      if (!pagesMap[idx]) pagesMap[idx] = {};
+      pagesMap[idx][el.dataset.field] = el.value;
     });
 
-    async function uploadFile(file) {
-      hide('result-card');
+    let original;
+    try {
+      const resp = await fetch('/api/outline/' + jobId);
+      original = await resp.json();
+    } catch { original = {}; }
+
+    const pages = (original.pages || []).map((p, i) => {
+      const edited = pagesMap[String(i)] || {};
+      return { ...p, title: edited.title ?? p.title, text: edited.text ?? p.text ?? p.key_content };
+    });
+    const outline = { ...original, title, pages };
+
+    try {
+      const resp = await fetch('/api/outline/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(outline) });
+      const data = await resp.json();
+      if (data.error) { showError(data.error); btn.disabled = false; return; }
+    } catch (e) {
+      showError('保存大纲失败：' + e.message); btn.disabled = false; return;
+    }
+
+    try {
+      const resp = await fetch('/api/generate/' + jobId, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) { showError(data.error); btn.disabled = false; return; }
+    } catch (e) {
+      showError('启动生成失败：' + e.message); btn.disabled = false; return;
+    }
+
+    toggleSidebar(false);
+    show('progress-card');
+    document.getElementById('progress-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('progress-title').textContent = '正在生成绘本…';
+    document.getElementById('progress-bar').style.width = '0%';
+    startSSE(jobId);
+  }
+
+  function esc(str) {
+    return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+  }
+
+  function showError(msg, retryable) {
+    hide('progress-card');
+    toggleSidebar(false);
+    show('error-card');
+    document.getElementById('error-text').textContent = msg;
+    const retryBtn = document.getElementById('retry-btn');
+    if (retryable && jobId) { retryBtn.classList.remove('hidden'); } else { retryBtn.classList.add('hidden'); }
+    document.getElementById('error-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function retryGeneration() {
+    if (!jobId) return;
+    try {
+      const resp = await fetch('/api/retry/' + jobId, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) { showError(data.error); return; }
       hide('error-card');
-      hide('outline-card');
-      const formData = new FormData();
-      formData.append('file', file);
-      for (const p of photoFiles) {
-        formData.append('photos', p);
-      }
+      show('progress-card');
+      document.getElementById('progress-title').textContent = '重试生成中…';
+      startSSE(jobId);
+    } catch (e) { showError('重试失败：' + e.message); }
+  }
 
-      try {
-        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-        const data = await resp.json();
-        if (data.error) { showError(data.error); return; }
-        jobId = data.job_id;
-        localStorage.setItem('pb_job_id', jobId);
-        show('progress-card');
-        document.getElementById('progress-title').textContent = '正在解析文档…';
-        startSSE(jobId);
-      } catch (e) {
-        showError('上传失败：' + e.message);
-      }
-    }
+  function resetUI() {
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    jobId = null;
+    localStorage.removeItem('pb_job_id');
+    photoFiles = [];
+    renderPhotos();
+    hide('progress-card');
+    hide('error-card');
+    hide('result-card');
+    toggleSidebar(false);
+    hide('file-info');
+    fileInput.value = '';
+  }
 
-    function startSSE(id) {
-      if (evtSource) { evtSource.close(); evtSource = null; }
-      evtSource = new EventSource('/api/stream/' + id);
-
-      evtSource.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.error) { showError(data.error); evtSource.close(); return; }
-        updateProgress(data);
-      };
-
-      evtSource.onerror = () => {
-        setTimeout(() => {
-          if (evtSource && evtSource.readyState === EventSource.CLOSED) {
-            evtSource = null;
-          }
-        }, 5000);
-      };
-    }
-
-    function updateProgress(data) {
-      if (data.stage === 'outline_ready') {
-        if (evtSource) { evtSource.close(); evtSource = null; }
-        hide('progress-card');
-        loadOutline(jobId);
-        return;
-      }
-
-      const bar = document.getElementById('progress-bar');
-      bar.style.width = (data.progress || 0) + '%';
-      document.getElementById('progress-text').textContent = stageLabels[data.stage] || data.stage;
-
-      if (data.stage === 'generating_images') {
-        document.getElementById('progress-page').textContent =
-          `正在绘制第 ${data.current_page || 1}/${data.total_pages || '?'} 页…`;
-      } else if (data.stage === 'character_sheets') {
-        document.getElementById('progress-page').textContent =
-          `正在绘制第 ${data.current_character || 1}/${data.total_characters || '?'} 个角色…`;
-      } else {
-        document.getElementById('progress-page').textContent = '';
-      }
-
+  async function restoreJob() {
+    const savedId = localStorage.getItem('pb_job_id');
+    if (!savedId) return;
+    try {
+      const resp = await fetch('/api/status/' + savedId);
+      if (!resp.ok) { localStorage.removeItem('pb_job_id'); return; }
+      const data = await resp.json();
+      if (data.error) { localStorage.removeItem('pb_job_id'); return; }
+      jobId = savedId;
       if (data.stage === 'done') {
-        if (evtSource) { evtSource.close(); evtSource = null; }
-        localStorage.removeItem('pb_job_id');
-        hide('progress-card');
         show('result-card');
         document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
         document.getElementById('download-btn').href = '/api/download/' + jobId;
-      }
-
-      if (data.stage === 'error') {
-        if (evtSource) { evtSource.close(); evtSource = null; }
-        localStorage.removeItem('pb_job_id');
+      } else if (data.stage === 'error') {
         showError(data.error, !!data.total_pages);
-      }
-    }
-
-    async function loadOutline(id) {
-      try {
-        const resp = await fetch('/api/outline/' + id);
-        const data = await resp.json();
-        if (data.error) { showError(data.error); return; }
-        renderOutline(data);
-        show('outline-card');
-      } catch (e) {
-        showError('加载大纲失败：' + e.message);
-      }
-    }
-
-    function renderOutline(outline) {
-      document.getElementById('outline-title').value = outline.title || '';
-
-      const charDiv = document.getElementById('outline-characters');
-      const chars = outline.characters || [];
-      if (chars.length > 0) {
-        charDiv.innerHTML = '<label class="block text-xs font-semibold text-stone-500 mb-2">角色设定</label>' +
-          '<div class="flex flex-wrap gap-2">' +
-          chars.map(c => `<span class="px-3 py-1.5 bg-peach-100 text-coral-600 rounded-xl text-sm font-medium">${esc(c.name || '')}（${esc(c.species || '')}）</span>`).join('') +
-          '</div>';
+      } else if (data.stage === 'outline_ready') {
+        loadOutline(jobId);
       } else {
-        charDiv.innerHTML = '';
-      }
-
-      const pagesDiv = document.getElementById('outline-pages');
-      const pages = outline.pages || [];
-      pagesDiv.innerHTML = pages.map((p, i) => `
-        <div class="border border-peach-200 rounded-2xl p-4 bg-cream-50">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="w-7 h-7 bg-coral-400 text-white rounded-full text-xs font-bold flex items-center justify-center shadow-sm">${i + 1}</span>
-            <input type="text" value="${esc(p.title || '')}" data-page="${i}" data-field="title"
-              class="flex-1 px-3 py-1.5 border border-peach-200 rounded-lg text-sm font-semibold text-stone-700 bg-white focus:ring-2 focus:ring-coral-400/40 focus:border-coral-400 outline-none transition-all">
-          </div>
-          <textarea data-page="${i}" data-field="text" rows="2"
-            class="w-full px-3 py-2.5 border border-peach-200 rounded-xl text-sm text-stone-600 bg-white resize-none focus:ring-2 focus:ring-coral-400/40 focus:border-coral-400 outline-none transition-all">${esc(p.text || p.key_content || '')}</textarea>
-        </div>
-      `).join('');
-    }
-
-    async function saveAndGenerate() {
-      const btn = document.getElementById('generate-btn');
-      btn.disabled = true;
-
-      const title = document.getElementById('outline-title').value;
-      const pageEls = document.querySelectorAll('#outline-pages [data-page]');
-      const pagesMap = {};
-      pageEls.forEach(el => {
-        const idx = el.dataset.page;
-        if (!pagesMap[idx]) pagesMap[idx] = {};
-        pagesMap[idx][el.dataset.field] = el.value;
-      });
-
-      let original;
-      try {
-        const resp = await fetch('/api/outline/' + jobId);
-        original = await resp.json();
-      } catch { original = {}; }
-
-      const pages = (original.pages || []).map((p, i) => {
-        const edited = pagesMap[String(i)] || {};
-        return { ...p, title: edited.title ?? p.title, text: edited.text ?? p.text ?? p.key_content };
-      });
-
-      const outline = { ...original, title, pages };
-
-      try {
-        const resp = await fetch('/api/outline/' + jobId, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(outline),
-        });
-        const data = await resp.json();
-        if (data.error) { showError(data.error); btn.disabled = false; return; }
-      } catch (e) {
-        showError('保存大纲失败：' + e.message);
-        btn.disabled = false;
-        return;
-      }
-
-      try {
-        const resp = await fetch('/api/generate/' + jobId, { method: 'POST' });
-        const data = await resp.json();
-        if (data.error) { showError(data.error); btn.disabled = false; return; }
-      } catch (e) {
-        showError('启动生成失败：' + e.message);
-        btn.disabled = false;
-        return;
-      }
-
-      hide('outline-card');
-      show('progress-card');
-      document.getElementById('progress-title').textContent = '正在生成绘本…';
-      document.getElementById('progress-bar').style.width = '0%';
-      startSSE(jobId);
-    }
-
-    function esc(str) {
-      return String(str).replace(/[&<>"']/g, ch => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      })[ch]);
-    }
-
-    function showError(msg, retryable) {
-      hide('progress-card');
-      hide('outline-card');
-      show('error-card');
-      document.getElementById('error-text').textContent = msg;
-      const retryBtn = document.getElementById('retry-btn');
-      if (retryable && jobId) {
-        retryBtn.classList.remove('hidden');
-      } else {
-        retryBtn.classList.add('hidden');
-      }
-    }
-
-    async function retryGeneration() {
-      if (!jobId) return;
-      try {
-        const resp = await fetch('/api/retry/' + jobId, { method: 'POST' });
-        const data = await resp.json();
-        if (data.error) { showError(data.error); return; }
-        hide('error-card');
         show('progress-card');
-        document.getElementById('progress-title').textContent = '重试生成中…';
+        document.getElementById('progress-title').textContent = '正在恢复进度…';
         startSSE(jobId);
-      } catch (e) {
-        showError('重试失败：' + e.message);
       }
-    }
+    } catch { localStorage.removeItem('pb_job_id'); }
+  }
 
-    function resetUI() {
-      if (evtSource) { evtSource.close(); evtSource = null; }
-      jobId = null;
-      localStorage.removeItem('pb_job_id');
-      photoFiles = [];
-      renderPhotos();
-      hide('progress-card');
-      hide('error-card');
-      hide('result-card');
-      hide('outline-card');
-      hide('file-info');
-      fileInput.value = '';
-    }
-
-    async function restoreJob() {
-      const savedId = localStorage.getItem('pb_job_id');
-      if (!savedId) return;
-      try {
-        const resp = await fetch('/api/status/' + savedId);
-        if (!resp.ok) { localStorage.removeItem('pb_job_id'); return; }
-        const data = await resp.json();
-        if (data.error) { localStorage.removeItem('pb_job_id'); return; }
-        jobId = savedId;
-        if (data.stage === 'done') {
-          show('result-card');
-          document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
-          document.getElementById('download-btn').href = '/api/download/' + jobId;
-        } else if (data.stage === 'error') {
-          showError(data.error, !!data.total_pages);
-        } else if (data.stage === 'outline_ready') {
-          loadOutline(jobId);
-        } else {
-          show('progress-card');
-          document.getElementById('progress-title').textContent = '正在恢复进度…';
-          startSSE(jobId);
-        }
-      } catch {
-        localStorage.removeItem('pb_job_id');
-      }
-    }
-
-    restoreJob();
-  </script>
+  restoreJob();
+</script>
 </body>
 </html>
