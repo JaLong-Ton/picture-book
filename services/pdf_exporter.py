@@ -12,11 +12,24 @@ from reportlab.pdfgen import canvas
 # Chinese font setup — prefer Source Han Serif (思源宋体)
 # ---------------------------------------------------------------------------
 _FONT_CANDIDATES = [
+    # Windows
     ("ChineseFont", r"C:\Windows\Fonts\NotoSerifSC-VF.ttf", None),
     ("ChineseFont", r"C:\Windows\Fonts\Source Han Serif SC Heavy (TrueType).ttf", None),
     ("ChineseFont", r"C:\Windows\Fonts\STSONG.TTF", None),
     ("ChineseFont", r"C:\Windows\Fonts\msyh.ttc", 0),
     ("ChineseFont", r"C:\Windows\Fonts\simhei.ttf", None),
+    # macOS
+    ("ChineseFont", "/System/Library/Fonts/STHeiti Light.ttc", 0),
+    ("ChineseFont", "/System/Library/Fonts/PingFang.ttc", 0),
+    ("ChineseFont", "/Library/Fonts/Songti.ttc", 0),
+    # Linux
+    ("ChineseFont", "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 0),
+    ("ChineseFont", "/usr/share/fonts/truetype/noto/NotoSerifSC-Regular.otf", None),
+    ("ChineseFont", "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", None),
+    ("ChineseFont", "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0),
+    ("ChineseFont", "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
+    # Bundled fallback (if user places a font in project/fonts/)
+    ("ChineseFont", os.path.join(os.path.dirname(__file__), "..", "fonts", "NotoSerifSC-Regular.ttf"), None),
 ]
 
 CN_FONT = "Helvetica"  # fallback

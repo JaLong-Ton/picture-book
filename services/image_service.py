@@ -3,7 +3,6 @@ import time
 from io import BytesIO
 
 import requests
-from PIL import Image
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,6 +11,9 @@ API_ENDPOINT = "/v1/api/generate"
 DEFAULT_BASE = "https://grsaiapi.com"
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2  # seconds, exponential: 2 → 4 → 8
+
+# Reusable session for connection pooling
+_session = requests.Session()
 
 
 def _headers() -> dict:
@@ -53,7 +55,7 @@ def draw(prompt: str, aspect_ratio: str = "16:9",
         body["images"] = images
 
     def _do():
-        resp = requests.post(
+        resp = _session.post(
             f"{_base_url()}{API_ENDPOINT}",
             json=body,
             headers=_headers(),
@@ -78,11 +80,9 @@ def draw(prompt: str, aspect_ratio: str = "16:9",
 def download_image(url: str) -> BytesIO:
     """Download image from URL, return BytesIO buffer. Retries 3x."""
     def _do():
-        resp = requests.get(url, timeout=30)
+        resp = _session.get(url, timeout=30)
         resp.raise_for_status()
-        img = Image.open(BytesIO(resp.content))
-        buf = BytesIO()
-        img.save(buf, format="PNG")
+        buf = BytesIO(resp.content)
         buf.seek(0)
         return buf
 

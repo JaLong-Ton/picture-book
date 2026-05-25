@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from services.mineru_service import MinerUService
 
 
@@ -54,4 +54,10 @@ def _parse_docx(filepath: str) -> str:
 
 
 def _parse_txt(filepath: str) -> str:
-    return Path(filepath).read_text(encoding="utf-8").strip()
+    raw = Path(filepath).read_bytes()
+    for enc in ("utf-8", "gbk", "gb2312", "gb18030", "latin-1"):
+        try:
+            return raw.decode(enc).strip()
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace").strip()

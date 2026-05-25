@@ -77,8 +77,11 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB upload limit
 
 jobs: dict[str, dict] = {}
+_job_locks: dict[str, threading.Lock] = {}
+_global_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -89,33 +92,43 @@ class JobStore:
 
     def __init__(self, db_path: str = "data/jobs.db"):
         self._db_path = db_path
+        self._lock = threading.Lock()
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
-                job_id     TEXT PRIMARY KEY,
-                stage      TEXT NOT NULL DEFAULT 'starting',
-                progress   INTEGER DEFAULT 0,
-                title      TEXT,
-                filename   TEXT,
-                pdf_path   TEXT,
-                doc_path   TEXT,
-                error      TEXT,
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL
+                job_id      TEXT PRIMARY KEY,
+                stage       TEXT NOT NULL DEFAULT 'starting',
+                progress    INTEGER DEFAULT 0,
+                title       TEXT,
+                filename    TEXT,
+                pdf_path    TEXT,
+                doc_path    TEXT,
+                photo_urls  TEXT,
+                error       TEXT,
+                created_at  REAL NOT NULL,
+                updated_at  REAL NOT NULL
             )
         """)
+        # Migrate: add photo_urls column if missing (for existing databases)
+        try:
+            self._conn.execute("SELECT photo_urls FROM jobs LIMIT 1")
+        except sqlite3.OperationalError:
+            self._conn.execute("ALTER TABLE jobs ADD COLUMN photo_urls TEXT")
+            self._conn.commit()
         self._conn.commit()
 
-    def create(self, job_id: str, doc_path: str):
+    def create(self, job_id: str, doc_path: str, photo_urls: list[str] | None = None):
         now = time.time()
         jobs[job_id] = {"stage": "starting", "progress": 0}
-        self._conn.execute(
-            "INSERT INTO jobs (job_id, stage, progress, doc_path, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-            (job_id, "starting", 0, doc_path, now, now),
-        )
-        self._conn.commit()
+        photo_json = json.dumps(photo_urls, ensure_ascii=False) if photo_urls else None
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO jobs (job_id, stage, progress, doc_path, photo_urls, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                (job_id, "starting", 0, doc_path, photo_json, now, now),
+            )
+            self._conn.commit()
 
     def update(self, job_id: str, **fields):
         if not fields:
@@ -123,11 +136,12 @@ class JobStore:
         jobs.setdefault(job_id, {}).update(fields)
         fields["updated_at"] = time.time()
         set_clause = ", ".join(f"{k}=?" for k in fields)
-        self._conn.execute(
-            f"UPDATE jobs SET {set_clause} WHERE job_id=?",
-            (*fields.values(), job_id),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                f"UPDATE jobs SET {set_clause} WHERE job_id=?",
+                (*fields.values(), job_id),
+            )
+            self._conn.commit()
 
     def get(self, job_id: str) -> dict | None:
         return jobs.get(job_id)
@@ -142,31 +156,37 @@ class JobStore:
 
     def load_existing(self):
         """Restore jobs from SQLite into memory on startup."""
-        cur = self._conn.execute(
-            "SELECT job_id, stage, progress, title, filename, pdf_path, doc_path, error FROM jobs"
-        )
-        for row in cur.fetchall():
-            jid, stage, prog, title, fn, pdf, doc, err = row
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT job_id, stage, progress, title, filename, pdf_path, doc_path, photo_urls, error FROM jobs"
+            )
+            rows = cur.fetchall()
+        for row in rows:
+            jid, stage, prog, title, fn, pdf, doc, photo_json, err = row
             if stage in ("done", "error"):
                 continue
+            restored = {"stage": "interrupted", "progress": prog, "title": title or ""}
+            if photo_json:
+                restored["photo_urls"] = json.loads(photo_json)
             if stage == "outline_ready":
-                # Restore outline-ready jobs so user can still preview & generate
-                jobs[jid] = {"stage": "outline_ready", "progress": prog, "title": title or ""}
-                continue
-            # Mark other incomplete jobs as interrupted
-            jobs[jid] = {"stage": "interrupted", "progress": prog, "title": title or ""}
-            self._conn.execute(
-                "UPDATE jobs SET stage='interrupted', updated_at=? WHERE job_id=?",
-                (time.time(), jid),
-            )
-        self._conn.commit()
+                restored["stage"] = "outline_ready"
+            jobs[jid] = restored
+            if stage != "outline_ready":
+                with self._lock:
+                    self._conn.execute(
+                        "UPDATE jobs SET stage='interrupted', updated_at=? WHERE job_id=?",
+                        (time.time(), jid),
+                    )
+        with self._lock:
+            self._conn.commit()
 
     def cleanup(self, ttl_hours: float = 24):
         cutoff = time.time() - ttl_hours * 3600
-        cur = self._conn.execute(
-            "SELECT job_id, doc_path, pdf_path FROM jobs WHERE created_at < ?", (cutoff,)
-        )
-        rows = cur.fetchall()
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT job_id, doc_path, pdf_path FROM jobs WHERE created_at < ?", (cutoff,)
+            )
+            rows = cur.fetchall()
         for jid, doc, pdf in rows:
             for p in (doc, pdf):
                 if p:
@@ -174,13 +194,13 @@ class JobStore:
             for d in (OUTPUT_DIR / jid, UPLOAD_DIR / jid):
                 if d.exists():
                     shutil.rmtree(d, ignore_errors=True)
-            # Also remove the original upload file
             for f in UPLOAD_DIR.glob(f"{jid}.*"):
                 f.unlink(missing_ok=True)
             jobs.pop(jid, None)
         if rows:
-            self._conn.execute("DELETE FROM jobs WHERE created_at < ?", (cutoff,))
-            self._conn.commit()
+            with self._lock:
+                self._conn.execute("DELETE FROM jobs WHERE created_at < ?", (cutoff,))
+                self._conn.commit()
         return len(rows)
 
 
@@ -197,6 +217,14 @@ def _run_cleanup_loop():
 
 
 job_store = JobStore()
+
+
+def _get_job_lock(job_id: str) -> threading.Lock:
+    """Get or create a per-job lock to prevent duplicate thread starts."""
+    with _global_lock:
+        if job_id not in _job_locks:
+            _job_locks[job_id] = threading.Lock()
+        return _job_locks[job_id]
 
 
 def parse_and_outline(job_id: str, doc_path: str, filename: str):
@@ -235,7 +263,7 @@ def parse_and_outline(job_id: str, doc_path: str, filename: str):
         job_store.update(job_id, stage="error", error=str(e))
 
 
-def generate_book(job_id: str, photo_urls: list[str] | None = None):
+def generate_book(job_id: str, photo_urls: list[str] | None = None, lock: threading.Lock | None = None):
     """Phase 3-5: character sheets → page images → PDF. Reads outline from disk."""
     job = jobs[job_id]
     job_dir = OUTPUT_DIR / job_id
@@ -330,6 +358,12 @@ def generate_book(job_id: str, photo_urls: list[str] | None = None):
         job["stage"] = "error"
         job["error"] = str(e)
         job_store.update(job_id, stage="error", error=str(e))
+    finally:
+        if lock:
+            try:
+                lock.release()
+            except RuntimeError:
+                pass
 
 
 @app.get("/")
@@ -372,9 +406,7 @@ def upload():
             mime = pf.content_type or "image/jpeg"
             photo_urls.append(f"data:{mime};base64,{b64}")
 
-    job_store.create(job_id, str(doc_path))
-    # Store photo_urls in memory for later use by generate_book
-    jobs[job_id]["photo_urls"] = photo_urls
+    job_store.create(job_id, str(doc_path), photo_urls)
     threading.Thread(
         target=parse_and_outline, args=(job_id, str(doc_path), filename), daemon=True
     ).start()
@@ -418,14 +450,21 @@ def generate(job_id):
     job = job_store.get(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
-    if job.get("stage") != "outline_ready":
-        return jsonify({"error": "Not ready to generate"}), 400
-    photo_urls = job.get("photo_urls", [])
-    job["progress"] = 0
-    job_store.update(job_id, stage="character_sheets", progress=0)
-    threading.Thread(
-        target=generate_book, args=(job_id, photo_urls), daemon=True
-    ).start()
+    lock = _get_job_lock(job_id)
+    if not lock.acquire(blocking=False):
+        return jsonify({"error": "Generation already in progress"}), 409
+    try:
+        if job.get("stage") != "outline_ready":
+            return jsonify({"error": "Not ready to generate"}), 400
+        photo_urls = job.get("photo_urls", [])
+        job["progress"] = 0
+        job_store.update(job_id, stage="character_sheets", progress=0)
+        threading.Thread(
+            target=generate_book, args=(job_id, photo_urls, lock), daemon=True
+        ).start()
+    except Exception:
+        lock.release()
+        raise
     return jsonify({"ok": True})
 
 
@@ -434,17 +473,23 @@ def retry(job_id):
     job = job_store.get(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
-    if job.get("stage") != "error":
-        return jsonify({"error": "Job is not in error state"}), 400
-    # Reset to generating state; generate_book() will skip already-generated pages
-    job["stage"] = "generating_images"
-    job.pop("error", None)
-    job["progress"] = 0
-    job_store.update(job_id, stage="generating_images", progress=0, error=None)
-    photo_urls = job.get("photo_urls", [])
-    threading.Thread(
-        target=generate_book, args=(job_id, photo_urls), daemon=True
-    ).start()
+    lock = _get_job_lock(job_id)
+    if not lock.acquire(blocking=False):
+        return jsonify({"error": "Generation already in progress"}), 409
+    try:
+        if job.get("stage") != "error":
+            return jsonify({"error": "Job is not in error state"}), 400
+        job["stage"] = "generating_images"
+        job.pop("error", None)
+        job["progress"] = 0
+        job_store.update(job_id, stage="generating_images", progress=0, error=None)
+        photo_urls = job.get("photo_urls", [])
+        threading.Thread(
+            target=generate_book, args=(job_id, photo_urls, lock), daemon=True
+        ).start()
+    except Exception:
+        lock.release()
+        raise
     return jsonify({"ok": True})
 
 

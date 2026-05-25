@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import requests
 from dotenv import load_dotenv
 
@@ -8,7 +9,7 @@ load_dotenv()
 OUTLINE_PROMPT = """你是一位世界级的儿童绘本设计师和故事讲述者。
 
 ## 任务
-根据以下文档内容，设计一本 10-15 页的儿童绘本大纲，并提取主要角色的外观描述。
+根据以下文档内容，设计一本 4-6 页的儿童绘本大纲，并提取主要角色的外观描述。
 
 ## 文档内容
 {text}
@@ -19,14 +20,14 @@ OUTLINE_PROMPT = """你是一位世界级的儿童绘本设计师和故事讲述
 提取故事中所有主要角色，为每个角色提供：
 - **name**：角色名
 - **species**：物种（如：小狐狸、小女孩、机器人）
-- **appearance**：详细外观描述（英文，用于 AI 图片生成），包括体型、毛发/肤色、眼睛、服装、配饰等
+- **appearance**：详细外观描述（用于 AI 图片生成），包括体型、毛发/肤色、眼睛、服装、配饰等
 
 ### 每页内容
 为每一页提供：
 1. **标题**：叙事性标题（不是"标题：副标题"格式）
 2. **叙事目标**：这一页在故事中的作用
 3. **关键内容**：要展示的文字（简短、适合儿童的句子）
-4. **视觉画面**：场景、角色动作、表情（英文，用于 AI 图片生成）
+4. **视觉画面**：场景、角色动作、表情（用于 AI 图片生成）
 5. **布局**：构图建议
 
 ## 禁止事项
@@ -43,7 +44,7 @@ OUTLINE_PROMPT = """你是一位世界级的儿童绘本设计师和故事讲述
     {
       "name": "角色名",
       "species": "物种",
-      "appearance": "Detailed appearance description in English for AI image generation..."
+      "appearance": "详细外观描述，包括体型、毛发/肤色、眼睛、服装、配饰等"
     }
   ],
   "pages": [
@@ -51,33 +52,33 @@ OUTLINE_PROMPT = """你是一位世界级的儿童绘本设计师和故事讲述
       "title": "叙事性标题",
       "narrative_goal": "这一页在故事中的作用",
       "key_content": "要展示在绘本页面上的文字",
-      "visual": "Detailed scene description in English including character actions and expressions...",
+      "visual": "场景描述，包括角色动作、表情、环境细节等",
       "layout": "构图建议"
     }
   ]
 }"""
 
-CHARACTER_SHEET_PROMPT = """Create a character reference sheet for a children's picture book character.
+CHARACTER_SHEET_PROMPT = """为以下儿童绘本角色创建角色设定图。
 
-## Character Info
-Name: {name}
-Species: {species}
-Appearance: {appearance}
+## 角色信息
+名称：{name}
+物种：{species}
+外观：{appearance}
 
-## Requirements
-1. Show the character from 3 angles: front, 3/4 view, side
-2. Show 3-4 expressions: happy, curious, surprised, thinking
-3. Full body and close-up face views
-4. Clean white background
-5. No text, labels, or annotations in the image — pure visual reference only
+## 要求
+1. 展示角色的 3 个角度：正面、3/4 侧面、侧面
+2. 展示 3-4 种表情：开心、好奇、惊讶、思考
+3. 全身和面部特写
+4. 干净的白色背景
+5. 图中不要出现任何文字、标签或注释——纯视觉参考
 
-## Style
-Disney Pixar 3D animation style
-Bright warm colors, orange/green/blue palette
-Big expressive eyes, rounded soft lines
+## 风格
+迪士尼皮克斯 3D 动画风格
+明亮温暖的色调，橙色/绿色/蓝色配色
+大而有神的眼睛，圆润柔和的线条
 
-## Layout
-Landscape 16:9, arranged like a professional character design sheet"""
+## 布局
+横版 16:9，按专业角色设定图的方式排列"""
 
 
 def _call_llm(prompt: str, system: str = "你只输出合法 JSON，不输出其他文字。") -> dict:
@@ -109,18 +110,40 @@ def _call_llm(prompt: str, system: str = "你只输出合法 JSON，不输出其
 
 def _parse_json(text: str) -> dict:
     text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-    return json.loads(text)
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Strip markdown code fences
+    fenced = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
+    if fenced:
+        try:
+            return json.loads(fenced.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+    # Extract largest JSON object brace-to-brace
+    brace_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if brace_match:
+        try:
+            return json.loads(brace_match.group(0))
+        except json.JSONDecodeError:
+            pass
+    raise ValueError(f"LLM 输出不是合法 JSON: {text[:200]}...")
 
 
-def generate_outline(text: str, max_pages: int = 15) -> dict:
+def generate_outline(text: str, max_pages: int = 6) -> dict:
     prompt = OUTLINE_PROMPT.replace("{text}", text[:8000])
-    content = _call_llm(prompt)
-    outline = _parse_json(content)
+    outline = None
+    for attempt in range(3):
+        content = _call_llm(prompt)
+        try:
+            outline = _parse_json(content)
+            break
+        except (ValueError, json.JSONDecodeError) as e:
+            if attempt == 2:
+                raise
+    assert outline is not None
 
     # Normalize page fields
     for page in outline.get("pages", []):
@@ -145,11 +168,11 @@ def build_character_description(characters: list[dict]) -> str:
     """Build a concise character description block for image prompts."""
     if not characters:
         return ""
-    lines = ["## Character Consistency (IMPORTANT)"]
-    lines.append("The following characters MUST appear consistent with these descriptions:")
+    lines = ["## 角色一致性（重要）"]
+    lines.append("以下角色必须保持外观一致：")
     for c in characters:
-        lines.append(f"- **{c.get('name', 'Unknown')}** ({c.get('species', '')}): {c.get('appearance', '')}")
+        lines.append(f"- **{c.get('name', '未知')}**（{c.get('species', '')}）：{c.get('appearance', '')}")
     lines.append("")
-    lines.append("Maintain identical: face shape, eye color, hair style, clothing.")
-    lines.append("Allowed to change: pose, expression, interaction with scene.")
+    lines.append("保持一致：脸型、眼睛颜色、发型、服装。")
+    lines.append("允许变化：姿势、表情、与场景的互动。")
     return "\n".join(lines)

@@ -5,50 +5,113 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 绘本生成器</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"Noto Sans SC"', 'sans-serif'] },
+          colors: {
+            cream:  { 50: '#FFF9F0', 100: '#FFF3E0', 200: '#FFE4C4' },
+            coral:  { 400: '#FF8A65', 500: '#FF7043', 600: '#F4511E' },
+            peach:  { 100: '#FFE8E0', 200: '#FFCCBC', 300: '#FFAB91' },
+            sky:    { 100: '#E3F2FD', 200: '#BBDEFB', 400: '#42A5F5' },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: linear-gradient(170deg, #FFF9F0 0%, #FFE8D6 40%, #FFF0E6 70%, #FFF9F0 100%);
+      min-height: 100vh;
+    }
+    .card-warm {
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,200,170,0.3);
+      box-shadow: 0 4px 24px rgba(255,150,100,0.08);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #FF8A65, #FF7043);
+      transition: all 0.2s ease;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #FF7043, #F4511E);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(255,112,67,0.35);
+    }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+    .progress-warm {
+      background: linear-gradient(90deg, #FF8A65, #FFB74D, #FF7043);
+    }
+    .upload-zone {
+      border: 2px dashed #FFCCBC;
+      transition: all 0.25s ease;
+    }
+    .upload-zone:hover, .upload-zone.drag-active {
+      border-color: #FF8A65;
+      background: rgba(255,138,101,0.06);
+    }
+    @keyframes float-in {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .animate-float-in { animation: float-in 0.4s ease-out; }
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+  </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans">
-  <div class="max-w-2xl mx-auto px-6 py-12">
+<body class="font-sans text-stone-800">
+  <div class="max-w-2xl mx-auto px-5 py-10 sm:py-14">
+
     <!-- Header -->
     <div class="text-center mb-10">
-      <h1 class="text-3xl font-bold text-slate-800 mb-2">AI 绘本生成器</h1>
-      <p class="text-slate-500">上传一份文档（PDF / Word / TXT），AI 自动把它变成一本儿童绘本</p>
+      <div class="text-5xl mb-3">📚</div>
+      <h1 class="text-3xl sm:text-4xl font-bold text-stone-800 mb-2">AI 绘本生成器</h1>
+      <p class="text-stone-500 text-sm sm:text-base">上传一份文档，AI 为你的故事画出精彩插图</p>
     </div>
 
     <!-- Upload Area -->
-    <div id="upload-card" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-      <label for="file-input" class="cursor-pointer block border-2 border-dashed border-slate-300 rounded-xl p-10 hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors">
-        <div class="text-4xl mb-3">📄</div>
-        <p class="text-slate-600 font-medium mb-1">拖拽或点击上传文档</p>
-        <p class="text-sm text-slate-400">支持 PDF / Word / TXT 格式</p>
+    <div id="upload-card" class="card-warm rounded-3xl p-6 sm:p-8 text-center animate-float-in">
+      <label for="file-input" class="cursor-pointer block upload-zone rounded-2xl p-8 sm:p-10">
+        <div class="text-4xl mb-3">✨</div>
+        <p class="text-stone-700 font-semibold mb-1">拖拽或点击上传文档</p>
+        <p class="text-sm text-stone-400">支持 PDF / Word / TXT 格式</p>
         <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt" class="hidden">
       </label>
-      <div id="file-info" class="hidden mt-4 py-2 px-4 bg-slate-100 rounded-lg text-sm text-slate-600 inline-flex items-center gap-2">
+      <div id="file-info" class="hidden mt-4 py-2 px-4 bg-cream-100 rounded-xl text-sm text-stone-600 inline-flex items-center gap-2">
+        <span>📎</span>
         <span id="file-name"></span>
-        <button id="clear-file" class="text-slate-400 hover:text-slate-600">&times;</button>
+        <button id="clear-file" class="ml-1 text-stone-400 hover:text-stone-600 transition-colors">&times;</button>
       </div>
     </div>
 
     <!-- Photo Upload Area (optional) -->
-    <div id="photo-card" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-4 text-center">
-      <label for="photo-input" class="cursor-pointer block border-2 border-dashed border-slate-300 rounded-xl p-8 hover:border-amber-400 hover:bg-amber-50/30 transition-colors">
+    <div id="photo-card" class="card-warm rounded-3xl p-6 sm:p-8 mt-4 text-center animate-float-in" style="animation-delay:0.1s">
+      <label for="photo-input" class="cursor-pointer block upload-zone rounded-2xl p-6 sm:p-8">
         <div class="text-3xl mb-2">📷</div>
-        <p class="text-slate-600 font-medium mb-1">上传人物照片（可选）</p>
-        <p class="text-sm text-slate-400">AI 会将照片中的人物融入绘本插图</p>
+        <p class="text-stone-700 font-medium mb-1">上传人物照片（可选）</p>
+        <p class="text-sm text-stone-400">AI 会将照片中的人物融入绘本插图</p>
         <input id="photo-input" type="file" accept=".jpg,.jpeg,.png,.webp" multiple class="hidden">
       </label>
       <div id="photo-preview" class="hidden mt-4 flex flex-wrap gap-3 justify-center"></div>
     </div>
 
     <!-- Outline Preview Card -->
-    <div id="outline-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6">
-      <h2 class="text-lg font-semibold text-slate-700 mb-1">📖 大纲预览</h2>
-      <p class="text-sm text-slate-400 mb-5">确认内容无误后点击「生成绘本」，也可以直接编辑修改</p>
+    <div id="outline-card" class="hidden card-warm rounded-3xl p-6 sm:p-8 mt-6 animate-float-in">
+      <h2 class="text-lg font-bold text-stone-800 mb-1">📖 大纲预览</h2>
+      <p class="text-sm text-stone-400 mb-5">确认内容无误后点击「生成绘本」，也可以直接编辑修改</p>
 
       <!-- Title -->
       <div class="mb-5">
-        <label class="block text-xs font-medium text-slate-500 mb-1">绘本标题</label>
+        <label class="block text-xs font-semibold text-stone-500 mb-1.5">绘本标题</label>
         <input id="outline-title" type="text"
-          class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none">
+          class="w-full px-4 py-2.5 border border-peach-200 rounded-xl text-stone-800 font-semibold bg-cream-50 focus:ring-2 focus:ring-coral-400/40 focus:border-coral-400 outline-none transition-all">
       </div>
 
       <!-- Characters -->
@@ -59,44 +122,44 @@
 
       <!-- Actions -->
       <div class="flex gap-3 justify-end">
-        <button onclick="resetUI()" class="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors text-sm">
+        <button onclick="resetUI()" class="px-5 py-2.5 border border-stone-300 text-stone-600 rounded-xl hover:bg-stone-100 transition-colors text-sm font-medium">
           重新上传
         </button>
-        <button onclick="saveAndGenerate()" class="px-8 py-2.5 bg-indigo-500 text-white rounded-xl font-medium hover:bg-indigo-600 transition-colors shadow-sm text-sm">
-          生成绘本
+        <button id="generate-btn" onclick="saveAndGenerate()" class="btn-primary px-8 py-2.5 text-white rounded-xl font-semibold shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          ✨ 生成绘本
         </button>
       </div>
     </div>
 
     <!-- Progress Card -->
-    <div id="progress-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6">
-      <h2 id="progress-title" class="text-lg font-semibold text-slate-700 mb-4"></h2>
-      <div class="w-full bg-slate-200 rounded-full h-3 mb-3">
-        <div id="progress-bar" class="bg-indigo-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+    <div id="progress-card" class="hidden card-warm rounded-3xl p-6 sm:p-8 mt-6">
+      <h2 id="progress-title" class="text-lg font-bold text-stone-800 mb-4"></h2>
+      <div class="w-full bg-cream-200 rounded-full h-3 mb-3 overflow-hidden">
+        <div id="progress-bar" class="progress-warm h-3 rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
       </div>
-      <p id="progress-text" class="text-sm text-slate-500"></p>
-      <p id="progress-page" class="text-sm text-slate-400 mt-1"></p>
+      <p id="progress-text" class="text-sm text-stone-500"></p>
+      <p id="progress-page" class="text-sm text-stone-400 mt-1 pulse-soft"></p>
     </div>
 
     <!-- Error Card -->
-    <div id="error-card" class="hidden bg-red-50 rounded-2xl border border-red-200 p-6 mt-6">
-      <p class="text-red-700 font-medium">出错了</p>
+    <div id="error-card" class="hidden rounded-3xl p-6 mt-6 bg-red-50 border border-red-200 animate-float-in">
+      <p class="text-red-700 font-semibold">出错了</p>
       <p id="error-text" class="text-red-600 text-sm mt-1"></p>
       <div class="mt-3 flex gap-2">
-        <button id="retry-btn" onclick="retryGeneration()" class="hidden px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm hover:bg-indigo-600 transition-colors">重试生成</button>
-        <button onclick="resetUI()" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 transition-colors">重新开始</button>
+        <button id="retry-btn" onclick="retryGeneration()" class="hidden px-4 py-2 btn-primary text-white rounded-xl text-sm">重试生成</button>
+        <button onclick="resetUI()" class="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-sm hover:bg-red-200 transition-colors">重新开始</button>
       </div>
     </div>
 
     <!-- Result Card -->
-    <div id="result-card" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mt-6 text-center">
-      <div class="text-4xl mb-3">📖</div>
-      <h2 id="result-title" class="text-xl font-bold text-slate-800 mb-2"></h2>
-      <p class="text-slate-500 mb-5">绘本已生成，点击下方按钮下载 PDF</p>
-      <a id="download-btn" href="#" class="inline-block px-8 py-3 bg-indigo-500 text-white rounded-xl font-medium hover:bg-indigo-600 transition-colors shadow-sm">
-        下载绘本 PDF
+    <div id="result-card" class="hidden card-warm rounded-3xl p-8 mt-6 text-center animate-float-in">
+      <div class="text-5xl mb-3">🎉</div>
+      <h2 id="result-title" class="text-xl font-bold text-stone-800 mb-2"></h2>
+      <p class="text-stone-500 mb-6">绘本已生成，点击下方按钮下载</p>
+      <a id="download-btn" href="#" class="btn-primary inline-block px-10 py-3 text-white rounded-2xl font-semibold shadow-md">
+        📥 下载绘本 PDF
       </a>
-      <button onclick="resetUI()" class="mt-4 block mx-auto px-4 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors">重新制作一本</button>
+      <button onclick="resetUI()" class="mt-5 block mx-auto px-4 py-2 text-sm text-stone-400 hover:text-stone-600 transition-colors">重新制作一本</button>
     </div>
   </div>
 
@@ -163,10 +226,10 @@
         wrap.className = 'relative group';
         const img = document.createElement('img');
         img.src = URL.createObjectURL(f);
-        img.className = 'w-20 h-20 object-cover rounded-lg border border-slate-200';
+        img.className = 'w-20 h-20 object-cover rounded-xl border-2 border-peach-200 shadow-sm';
         const btn = document.createElement('button');
         btn.innerHTML = '&times;';
-        btn.className = 'absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity';
+        btn.className = 'absolute -top-2 -right-2 w-5 h-5 bg-coral-500 text-white rounded-full text-xs flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow';
         btn.onclick = () => { photoFiles.splice(idx, 1); renderPhotos(); };
         wrap.appendChild(img);
         wrap.appendChild(btn);
@@ -175,11 +238,11 @@
     }
 
     const dropZone = document.querySelector('label[for="file-input"]');
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-indigo-400', 'bg-indigo-50/30'); });
-    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-indigo-400', 'bg-indigo-50/30'); });
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-active'); });
+    dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-active'); });
     dropZone.addEventListener('drop', e => {
       e.preventDefault();
-      dropZone.classList.remove('border-indigo-400', 'bg-indigo-50/30');
+      dropZone.classList.remove('drag-active');
       const f = e.dataTransfer.files[0];
       if (!f) return;
       fileInput.files = e.dataTransfer.files;
@@ -223,13 +286,15 @@
       };
 
       evtSource.onerror = () => {
-        evtSource.close();
-        evtSource = null;
+        setTimeout(() => {
+          if (evtSource && evtSource.readyState === EventSource.CLOSED) {
+            evtSource = null;
+          }
+        }, 5000);
       };
     }
 
     function updateProgress(data) {
-      // Outline ready → show preview, stop SSE
       if (data.stage === 'outline_ready') {
         if (evtSource) { evtSource.close(); evtSource = null; }
         hide('progress-card');
@@ -263,7 +328,6 @@
       if (data.stage === 'error') {
         if (evtSource) { evtSource.close(); evtSource = null; }
         localStorage.removeItem('pb_job_id');
-        // If job has total_pages, outline was generated — can retry image generation
         showError(data.error, !!data.total_pages);
       }
     }
@@ -281,39 +345,38 @@
     }
 
     function renderOutline(outline) {
-      // Title
       document.getElementById('outline-title').value = outline.title || '';
 
-      // Characters
       const charDiv = document.getElementById('outline-characters');
       const chars = outline.characters || [];
       if (chars.length > 0) {
-        charDiv.innerHTML = '<label class="block text-xs font-medium text-slate-500 mb-2">角色设定</label>' +
+        charDiv.innerHTML = '<label class="block text-xs font-semibold text-stone-500 mb-2">角色设定</label>' +
           '<div class="flex flex-wrap gap-2">' +
-          chars.map(c => `<span class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm">${esc(c.name || '')}（${esc(c.species || '')}）</span>`).join('') +
+          chars.map(c => `<span class="px-3 py-1.5 bg-peach-100 text-coral-600 rounded-xl text-sm font-medium">${esc(c.name || '')}（${esc(c.species || '')}）</span>`).join('') +
           '</div>';
       } else {
         charDiv.innerHTML = '';
       }
 
-      // Pages
       const pagesDiv = document.getElementById('outline-pages');
       const pages = outline.pages || [];
       pagesDiv.innerHTML = pages.map((p, i) => `
-        <div class="border border-slate-200 rounded-xl p-4">
+        <div class="border border-peach-200 rounded-2xl p-4 bg-cream-50">
           <div class="flex items-center gap-2 mb-3">
-            <span class="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold flex items-center justify-center">${i + 1}</span>
+            <span class="w-7 h-7 bg-coral-400 text-white rounded-full text-xs font-bold flex items-center justify-center shadow-sm">${i + 1}</span>
             <input type="text" value="${esc(p.title || '')}" data-page="${i}" data-field="title"
-              class="flex-1 px-2 py-1 border border-slate-200 rounded-md text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none">
+              class="flex-1 px-3 py-1.5 border border-peach-200 rounded-lg text-sm font-semibold text-stone-700 bg-white focus:ring-2 focus:ring-coral-400/40 focus:border-coral-400 outline-none transition-all">
           </div>
           <textarea data-page="${i}" data-field="text" rows="2"
-            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 resize-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 outline-none">${esc(p.text || p.key_content || '')}</textarea>
+            class="w-full px-3 py-2.5 border border-peach-200 rounded-xl text-sm text-stone-600 bg-white resize-none focus:ring-2 focus:ring-coral-400/40 focus:border-coral-400 outline-none transition-all">${esc(p.text || p.key_content || '')}</textarea>
         </div>
       `).join('');
     }
 
     async function saveAndGenerate() {
-      // Collect edited outline
+      const btn = document.getElementById('generate-btn');
+      btn.disabled = true;
+
       const title = document.getElementById('outline-title').value;
       const pageEls = document.querySelectorAll('#outline-pages [data-page]');
       const pagesMap = {};
@@ -323,7 +386,6 @@
         pagesMap[idx][el.dataset.field] = el.value;
       });
 
-      // Load original outline to preserve fields we didn't edit (visual, layout, etc.)
       let original;
       try {
         const resp = await fetch('/api/outline/' + jobId);
@@ -337,7 +399,6 @@
 
       const outline = { ...original, title, pages };
 
-      // Save edited outline
       try {
         const resp = await fetch('/api/outline/' + jobId, {
           method: 'POST',
@@ -345,23 +406,23 @@
           body: JSON.stringify(outline),
         });
         const data = await resp.json();
-        if (data.error) { showError(data.error); return; }
+        if (data.error) { showError(data.error); btn.disabled = false; return; }
       } catch (e) {
         showError('保存大纲失败：' + e.message);
+        btn.disabled = false;
         return;
       }
 
-      // Start generation
       try {
         const resp = await fetch('/api/generate/' + jobId, { method: 'POST' });
         const data = await resp.json();
-        if (data.error) { showError(data.error); return; }
+        if (data.error) { showError(data.error); btn.disabled = false; return; }
       } catch (e) {
         showError('启动生成失败：' + e.message);
+        btn.disabled = false;
         return;
       }
 
-      // Show progress and resume SSE
       hide('outline-card');
       show('progress-card');
       document.getElementById('progress-title').textContent = '正在生成绘本…';
@@ -370,9 +431,9 @@
     }
 
     function esc(str) {
-      const d = document.createElement('div');
-      d.textContent = str;
-      return d.innerHTML;
+      return String(str).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
     }
 
     function showError(msg, retryable) {
@@ -417,7 +478,6 @@
       fileInput.value = '';
     }
 
-    // Restore job state after page refresh
     async function restoreJob() {
       const savedId = localStorage.getItem('pb_job_id');
       if (!savedId) return;
@@ -436,7 +496,6 @@
         } else if (data.stage === 'outline_ready') {
           loadOutline(jobId);
         } else {
-          // In progress — reconnect SSE
           show('progress-card');
           document.getElementById('progress-title').textContent = '正在恢复进度…';
           startSSE(jobId);
