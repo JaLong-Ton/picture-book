@@ -59,7 +59,7 @@ def draw(prompt: str, aspect_ratio: str = "16:9",
             f"{_base_url()}{API_ENDPOINT}",
             json=body,
             headers=_headers(),
-            timeout=120,
+            timeout=300,
         )
         resp.raise_for_status()
         data = resp.json()

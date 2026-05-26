@@ -536,6 +536,16 @@ def download(job_id):
     )
 
 
+@app.get("/gallery/<filename>")
+def gallery_image(filename):
+    """Serve gallery preview images."""
+    gallery_dir = OUTPUT_DIR / "gallery"
+    file_path = gallery_dir / filename
+    if not file_path.exists():
+        return jsonify({"error": "Image not found"}), 404
+    return send_file(str(file_path), mimetype="image/png")
+
+
 if __name__ == "__main__":
     # Restore jobs from previous session
     job_store.load_existing()
