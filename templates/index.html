@@ -86,6 +86,9 @@
   }
 </script>
 <style>
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     background-color: #FFF2E8;
     color: #54433d;
@@ -179,6 +182,118 @@
     50% { opacity: 0.7; }
   }
   .pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+
+  /* Upload loading state */
+  .upload-loading {
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Spinner */
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(148, 73, 45, 0.2);
+    border-top-color: #94492d;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Confetti */
+  .confetti {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    z-index: 100;
+    pointer-events: none;
+    animation: confetti-fall 3s ease-out forwards;
+  }
+  @keyframes confetti-fall {
+    0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
+  }
+
+  /* Step indicator */
+  .step-active {
+    background: linear-gradient(135deg, #94492d, #d66b44);
+    color: white;
+    box-shadow: 0 0 20px rgba(148, 73, 45, 0.4);
+  }
+  .step-done {
+    background: #0d696a;
+    color: white;
+  }
+  .step-pending {
+    background: #efeded;
+    color: #87736c;
+  }
+
+  /* File info chip */
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255, 219, 207, 0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(148, 73, 45, 0.1);
+  }
+
+  /* Photo card hover */
+  .photo-card {
+    transition: all 0.2s ease;
+  }
+  .photo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(148, 73, 45, 0.2);
+  }
+
+  /* Button press effect */
+  .btn-press:active {
+    transform: scale(0.97);
+  }
+
+  /* Success checkmark */
+  .checkmark {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #0d696a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pop-in 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+  @keyframes pop-in {
+    0% { transform: scale(0); }
+    100% { transform: scale(1); }
+  }
+
+  /* Floating label */
+  .float-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: white;
+    padding: 0 8px;
+    font-size: 12px;
+    color: #94492d;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col relative">
@@ -197,15 +312,22 @@
 <nav class="w-full top-0 bg-white/50 backdrop-blur-2xl shadow-sm sticky z-50 border-b border-white/40">
   <div class="max-w-[1100px] mx-auto px-5 md:px-16 flex justify-between items-center h-20">
     <div class="flex items-center gap-8">
-      <a class="font-headline-md text-headline-md text-primary text-glow" href="#">StoryPebble</a>
+      <a class="flex items-center gap-3" href="#">
+        <svg class="w-8 h-8" fill="none" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <rect fill="#ffb59b" height="28" rx="2" width="20" x="28" y="12"/>
+          <rect fill="#0d696a" height="28" rx="2" width="20" x="20" y="16"/>
+          <rect fill="#94492d" height="28" rx="2" width="20" x="12" y="20"/>
+        </svg>
+        <span class="font-headline-md text-headline-md text-primary text-glow">StoryPebble</span>
+      </a>
       <div class="hidden md:flex items-center gap-6">
-        <a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md" href="#">首页</a>
-        <a class="text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md" href="#how-it-works">使用方法</a>
-        <a class="text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md" href="#gallery">作品展示</a>
+        <a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md transition-colors duration-300" href="#">首页</a>
+        <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#how-it-works">使用方法</a>
+        <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#gallery">作品展示</a>
       </div>
     </div>
     <div class="flex items-center gap-4">
-      <button class="font-label-md text-label-md text-primary hover:opacity-80 transition-opacity px-4 py-2">登录</button>
+      <button class="font-label-md text-label-md text-primary hover:bg-primary-fixed/30 transition-all duration-300 px-5 py-2.5 rounded-full btn-press">登录</button>
     </div>
   </div>
 </nav>
@@ -230,130 +352,212 @@
     <!-- Upload Cards -->
     <div class="w-full space-y-6">
       <!-- Document Upload -->
-      <div class="glass-card rounded-[32px] p-2 animate-float-element">
-        <label for="file-input" class="upload-dashed-border flex flex-col items-center justify-center py-16 px-6 cursor-pointer hover:bg-white/50 transition-colors">
-          <span class="material-symbols-outlined text-4xl text-primary-container mb-4 icon-glow" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+      <div id="upload-card" class="glass-card rounded-[32px] p-2 animate-float-element transition-all duration-300">
+        <label for="file-input" id="upload-label" class="upload-dashed-border flex flex-col items-center justify-center py-16 px-6 cursor-pointer hover:bg-white/50 transition-all duration-300">
+          <div id="upload-icon" class="w-16 h-16 bg-primary-fixed/30 rounded-full flex items-center justify-center mb-4">
+            <span class="material-symbols-outlined text-3xl text-primary icon-glow" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+          </div>
           <h3 class="font-headline-md text-[20px] md:text-[24px] text-on-surface mb-2">拖拽或点击上传文档</h3>
           <p class="font-body-md text-body-md text-outline">支持 PDF / Word / TXT 格式</p>
           <input id="file-input" type="file" accept=".pdf,.doc,.docx,.txt" class="hidden">
         </label>
-        <div id="file-info" class="hidden mt-3 mx-4 mb-4 py-2 px-4 bg-primary-fixed/30 rounded-xl text-sm text-on-surface-variant inline-flex items-center gap-2">
-          <span class="material-symbols-outlined text-base">attach_file</span>
-          <span id="file-name"></span>
-          <button id="clear-file" class="ml-1 text-outline hover:text-on-surface transition-colors">&times;</button>
+        <div id="file-info" class="hidden mx-4 mb-4 p-4 bg-primary-fixed/20 rounded-2xl border border-primary/10">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+              <span class="material-symbols-outlined text-primary">description</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p id="file-name" class="font-label-md text-on-surface truncate"></p>
+              <p id="file-size" class="font-body-md text-xs text-outline"></p>
+            </div>
+            <button id="clear-file" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors text-outline hover:text-error">
+              <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Photo Upload -->
       <div class="glass-card rounded-[32px] p-2 animate-float-element-delayed">
-        <label for="photo-input" class="upload-dashed-border flex flex-col items-center justify-center py-12 px-6 cursor-pointer hover:bg-white/50 transition-colors">
-          <span class="material-symbols-outlined text-4xl text-tertiary-container mb-4 icon-glow" style="font-variation-settings: 'FILL' 1;">photo_camera</span>
+        <label for="photo-input" class="upload-dashed-border flex flex-col items-center justify-center py-12 px-6 cursor-pointer hover:bg-white/50 transition-all duration-300">
+          <div class="w-14 h-14 bg-secondary-fixed/30 rounded-full flex items-center justify-center mb-4">
+            <span class="material-symbols-outlined text-2xl text-secondary icon-glow" style="font-variation-settings: 'FILL' 1;">photo_camera</span>
+          </div>
           <h3 class="font-headline-md text-[18px] md:text-[20px] text-on-surface mb-2">上传人物照片（可选）</h3>
           <p class="font-body-md text-body-md text-outline">AI 会将照片中的人物融入绘本插图</p>
           <input id="photo-input" type="file" accept=".jpg,.jpeg,.png,.webp" multiple class="hidden">
         </label>
-        <div id="photo-preview" class="hidden mt-3 mx-4 mb-4 flex flex-wrap gap-3 justify-center"></div>
+        <div id="photo-preview" class="hidden mx-4 mb-4 flex flex-wrap gap-3 justify-center"></div>
       </div>
     </div>
   </section>
 
   <!-- Progress Card (hidden by default) -->
   <div id="progress-card" class="hidden w-full max-w-3xl glass-card rounded-[32px] p-8 z-10">
-    <h2 id="progress-title" class="font-headline-md text-[20px] text-on-surface mb-4"></h2>
-    <div class="w-full bg-surface-container rounded-full h-3 mb-3 overflow-hidden">
+    <h2 id="progress-title" class="font-headline-md text-[20px] text-on-surface mb-6"></h2>
+
+    <!-- Step Indicators -->
+    <div class="flex items-center justify-between mb-6 px-4">
+      <div class="flex flex-col items-center">
+        <div id="step-1" class="w-10 h-10 rounded-full step-pending flex items-center justify-center transition-all duration-300">
+          <span class="material-symbols-outlined text-lg">description</span>
+        </div>
+        <span class="text-xs mt-2 text-outline font-medium">解析</span>
+      </div>
+      <div class="flex-1 h-1 bg-surface-container mx-2 rounded-full overflow-hidden">
+        <div id="step-line-1" class="h-full bg-primary transition-all duration-500" style="width: 0%"></div>
+      </div>
+      <div class="flex flex-col items-center">
+        <div id="step-2" class="w-10 h-10 rounded-full step-pending flex items-center justify-center transition-all duration-300">
+          <span class="material-symbols-outlined text-lg">draw</span>
+        </div>
+        <span class="text-xs mt-2 text-outline font-medium">创作</span>
+      </div>
+      <div class="flex-1 h-1 bg-surface-container mx-2 rounded-full overflow-hidden">
+        <div id="step-line-2" class="h-full bg-primary transition-all duration-500" style="width: 0%"></div>
+      </div>
+      <div class="flex flex-col items-center">
+        <div id="step-3" class="w-10 h-10 rounded-full step-pending flex items-center justify-center transition-all duration-300">
+          <span class="material-symbols-outlined text-lg">download</span>
+        </div>
+        <span class="text-xs mt-2 text-outline font-medium">完成</span>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="w-full bg-surface-container rounded-full h-3 mb-4 overflow-hidden">
       <div id="progress-bar" class="progress-warm h-3 rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
     </div>
-    <p id="progress-text" class="font-body-md text-body-md text-on-surface-variant"></p>
-    <p id="progress-page" class="font-body-md text-sm text-outline mt-1 pulse-soft"></p>
+
+    <!-- Status Text -->
+    <div class="flex items-center gap-2">
+      <div id="progress-spinner" class="hidden">
+        <div class="spinner w-5 h-5 border-2"></div>
+      </div>
+      <p id="progress-text" class="font-body-md text-body-md text-on-surface-variant"></p>
+    </div>
+    <p id="progress-page" class="font-body-md text-sm text-outline mt-2 pulse-soft"></p>
   </div>
 
   <!-- Error Card (hidden by default) -->
-  <div id="error-card" class="hidden w-full max-w-3xl rounded-[32px] p-8 bg-error-container/30 border border-error/20 z-10">
-    <div class="flex items-center gap-2 mb-2">
-      <span class="material-symbols-outlined text-error">error</span>
-      <p class="text-error font-semibold">出错了</p>
+  <div id="error-card" class="hidden w-full max-w-3xl glass-card rounded-[32px] p-8 border-2 border-error/20 z-10">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-12 h-12 bg-error-container rounded-full flex items-center justify-center">
+        <span class="material-symbols-outlined text-error text-2xl">error</span>
+      </div>
+      <div>
+        <p class="text-error font-semibold text-lg">出错了</p>
+        <p class="text-on-error-container text-sm">请检查后重试</p>
+      </div>
     </div>
-    <p id="error-text" class="text-on-error-container text-sm mb-3"></p>
-    <div class="flex gap-2">
-      <button id="retry-btn" onclick="retryGeneration()" class="hidden px-5 py-2 bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md rounded-full hover:opacity-90 transition-opacity">重试生成</button>
-      <button onclick="resetUI()" class="px-5 py-2 bg-error-container text-on-error-container font-label-md text-label-md rounded-full hover:opacity-80 transition-opacity">重新开始</button>
+    <p id="error-text" class="text-on-surface-variant text-sm mb-4 p-3 bg-error-container/20 rounded-xl"></p>
+    <div class="flex gap-3">
+      <button id="retry-btn" onclick="retryGeneration()" class="hidden px-6 py-2.5 bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md rounded-full hover:opacity-90 transition-all btn-press flex items-center gap-2">
+        <span class="material-symbols-outlined text-lg">refresh</span> 重试生成
+      </button>
+      <button onclick="resetUI()" class="px-6 py-2.5 bg-surface-container text-on-surface font-label-md text-label-md rounded-full hover:bg-surface-container-high transition-all btn-press">重新开始</button>
     </div>
   </div>
 
   <!-- Result Card (hidden by default) -->
   <div id="result-card" class="hidden w-full max-w-3xl glass-card rounded-[32px] p-10 text-center z-10">
-    <span class="material-symbols-outlined text-5xl text-primary-container mb-4 icon-glow" style="font-variation-settings: 'FILL' 1;">celebration</span>
+    <div id="celebration-icon" class="checkmark mx-auto mb-6">
+      <span class="material-symbols-outlined text-3xl text-white">check</span>
+    </div>
     <h2 id="result-title" class="font-headline-md text-headline-md text-on-surface mb-2"></h2>
     <p class="font-body-md text-body-md text-on-surface-variant mb-8">绘本已生成，点击下方按钮下载</p>
-    <a id="download-btn" href="#" class="inline-block bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md px-12 py-4 rounded-full shadow-[0_0_20px_rgba(148,73,45,0.4)] hover:shadow-[0_0_30px_rgba(148,73,45,0.6)] hover:opacity-90 active:scale-95 transition-all">
-      <span class="material-symbols-outlined align-middle mr-1" style="font-size:20px;">download</span> 下载绘本 PDF
+    <a id="download-btn" href="#" class="inline-flex items-center gap-2 bg-gradient-to-r from-[#d66b44] to-primary text-on-primary font-label-md text-label-md px-12 py-4 rounded-full shadow-[0_0_20px_rgba(148,73,45,0.4)] hover:shadow-[0_0_30px_rgba(148,73,45,0.6)] hover:opacity-90 active:scale-95 transition-all btn-press">
+      <span class="material-symbols-outlined" style="font-size:20px;">download</span> 下载绘本 PDF
     </a>
-    <button onclick="resetUI()" class="mt-6 block mx-auto font-body-md text-sm text-outline hover:text-on-surface transition-colors">重新制作一本</button>
+    <button onclick="resetUI()" class="mt-6 block mx-auto font-body-md text-sm text-outline hover:text-on-surface transition-colors btn-press">重新制作一本</button>
   </div>
 
   <!-- How it Works Section -->
   <section class="w-full py-16 flex flex-col items-center z-10" id="how-it-works">
-    <h2 class="font-headline-md text-headline-md text-on-surface mb-12 text-glow">它是如何工作的？</h2>
+    <h2 class="font-headline-md text-headline-md text-on-surface mb-4 text-glow">它是如何工作的？</h2>
+    <p class="font-body-md text-on-surface-variant mb-12 text-center">三步即可创建专属绘本</p>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
-      <div class="glass-card-step rounded-xl p-8 flex flex-col items-center text-center relative animate-float-element">
-        <div class="w-16 h-16 bg-primary-fixed rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(255,219,207,0.8)]">
+      <div class="glass-card-step rounded-2xl p-8 flex flex-col items-center text-center relative group hover:scale-105 transition-all duration-300">
+        <div class="w-16 h-16 bg-primary-fixed rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(255,219,207,0.8)] group-hover:shadow-[0_0_30px_rgba(255,219,207,1)] transition-shadow">
           <span class="material-symbols-outlined text-primary text-3xl icon-glow">upload_file</span>
         </div>
-        <h3 class="font-label-md text-[18px] text-on-surface mb-2">1. 上传文档</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant">上传你的故事文稿，支持 PDF、Word、TXT 格式。</p>
+        <div class="w-8 h-8 bg-primary text-on-primary rounded-full flex items-center justify-center text-sm font-bold mb-4">1</div>
+        <h3 class="font-headline-md text-[18px] text-on-surface mb-2">上传文档</h3>
+        <p class="font-body-md text-sm text-on-surface-variant">上传你的故事文稿，支持 PDF、Word、TXT 格式。</p>
       </div>
-      <div class="glass-card-step rounded-xl p-8 flex flex-col items-center text-center relative animate-float-element" style="animation-delay: 1s;">
-        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-outline-variant/50"></div>
-        <div class="w-16 h-16 bg-secondary-fixed rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(163,240,240,0.8)]">
+      <div class="glass-card-step rounded-2xl p-8 flex flex-col items-center text-center relative group hover:scale-105 transition-all duration-300" style="animation-delay: 1s;">
+        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-gradient-to-r from-primary to-secondary"></div>
+        <div class="w-16 h-16 bg-secondary-fixed rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(163,240,240,0.8)] group-hover:shadow-[0_0_30px_rgba(163,240,240,1)] transition-shadow">
           <span class="material-symbols-outlined text-secondary text-3xl icon-glow">draw</span>
         </div>
-        <h3 class="font-label-md text-[18px] text-on-surface mb-2">2. AI 创作</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant">AI 自动分镜并生成精美的绘本插画。</p>
+        <div class="w-8 h-8 bg-secondary text-on-secondary rounded-full flex items-center justify-center text-sm font-bold mb-4">2</div>
+        <h3 class="font-headline-md text-[18px] text-on-surface mb-2">AI 创作</h3>
+        <p class="font-body-md text-sm text-on-surface-variant">AI 自动分镜并生成精美的绘本插画。</p>
       </div>
-      <div class="glass-card-step rounded-xl p-8 flex flex-col items-center text-center relative animate-float-element" style="animation-delay: 2s;">
-        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-outline-variant/50"></div>
-        <div class="w-16 h-16 bg-tertiary-fixed rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(238,224,213,0.8)]">
+      <div class="glass-card-step rounded-2xl p-8 flex flex-col items-center text-center relative group hover:scale-105 transition-all duration-300" style="animation-delay: 2s;">
+        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-gradient-to-r from-secondary to-tertiary"></div>
+        <div class="w-16 h-16 bg-tertiary-fixed rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(238,224,213,0.8)] group-hover:shadow-[0_0_30px_rgba(238,224,213,1)] transition-shadow">
           <span class="material-symbols-outlined text-tertiary text-3xl icon-glow">download</span>
         </div>
-        <h3 class="font-label-md text-[18px] text-on-surface mb-2">3. 下载绘本</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant">预览、微调后，下载完整的 PDF 绘本。</p>
+        <div class="w-8 h-8 bg-tertiary text-on-tertiary rounded-full flex items-center justify-center text-sm font-bold mb-4">3</div>
+        <h3 class="font-headline-md text-[18px] text-on-surface mb-2">下载绘本</h3>
+        <p class="font-body-md text-sm text-on-surface-variant">预览、微调后，下载完整的 PDF 绘本。</p>
       </div>
     </div>
   </section>
 
   <!-- Gallery Section (placeholder) -->
   <section class="w-full py-16 flex flex-col items-center z-10" id="gallery">
-    <h2 class="font-headline-md text-headline-md text-on-surface mb-12 text-glow">作品展示</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-      <div class="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface-container cursor-pointer shadow-[0_10px_40px_-10px_rgba(148,73,45,0.2)] border border-white/40">
+    <h2 class="font-headline-md text-headline-md text-on-surface mb-4 text-glow">作品展示</h2>
+    <p class="font-body-md text-on-surface-variant mb-12 text-center">探索其他用户创作的精彩绘本</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 w-full">
+      <div class="group relative aspect-[3/4] rounded-3xl overflow-hidden bg-surface-container cursor-pointer shadow-[0_20px_60px_-15px_rgba(148,73,45,0.25)] border border-white/40 hover:shadow-[0_25px_70px_-15px_rgba(148,73,45,0.35)] hover:-translate-y-2 transition-all duration-500">
         <div class="w-full h-full bg-gradient-to-br from-primary-fixed to-secondary-container flex items-center justify-center">
-          <span class="material-symbols-outlined text-6xl text-primary/30" style="font-variation-settings: 'FILL' 1;">auto_stories</span>
+          <span class="material-symbols-outlined text-7xl text-primary/20 group-hover:text-primary/40 transition-colors duration-300" style="font-variation-settings: 'FILL' 1;">auto_stories</span>
         </div>
-        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
-          <h4 class="font-label-md text-[18px] text-surface-container-lowest mb-1">示例绘本 1</h4>
-          <p class="font-body-md text-[14px] text-surface-container-lowest/80">即将上线</p>
+        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/95 via-on-surface/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-8">
+          <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+            <h4 class="font-headline-md text-[20px] text-surface-container-lowest mb-2">示例绘本 1</h4>
+            <p class="font-body-md text-[14px] text-surface-container-lowest/80">奇幻冒险之旅</p>
+            <div class="mt-4 flex items-center gap-2 text-primary-container">
+              <span class="font-label-sm text-sm">查看详情</span>
+              <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface-container cursor-pointer shadow-[0_10px_40px_-10px_rgba(148,73,45,0.2)] border border-white/40">
+      <div class="group relative aspect-[3/4] rounded-3xl overflow-hidden bg-surface-container cursor-pointer shadow-[0_20px_60px_-15px_rgba(148,73,45,0.25)] border border-white/40 hover:shadow-[0_25px_70px_-15px_rgba(148,73,45,0.35)] hover:-translate-y-2 transition-all duration-500">
         <div class="w-full h-full bg-gradient-to-br from-secondary-fixed to-primary-fixed flex items-center justify-center">
-          <span class="material-symbols-outlined text-6xl text-secondary/30" style="font-variation-settings: 'FILL' 1;">menu_book</span>
+          <span class="material-symbols-outlined text-7xl text-secondary/20 group-hover:text-secondary/40 transition-colors duration-300" style="font-variation-settings: 'FILL' 1;">menu_book</span>
         </div>
-        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
-          <h4 class="font-label-md text-[18px] text-surface-container-lowest mb-1">示例绘本 2</h4>
-          <p class="font-body-md text-[14px] text-surface-container-lowest/80">即将上线</p>
+        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/95 via-on-surface/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-8">
+          <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+            <h4 class="font-headline-md text-[20px] text-surface-container-lowest mb-2">示例绘本 2</h4>
+            <p class="font-body-md text-[14px] text-surface-container-lowest/80">温馨家庭故事</p>
+            <div class="mt-4 flex items-center gap-2 text-primary-container">
+              <span class="font-label-sm text-sm">查看详情</span>
+              <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-surface-container cursor-pointer hidden md:block shadow-[0_10px_40px_-10px_rgba(148,73,45,0.2)] border border-white/40">
+      <div class="group relative aspect-[3/4] rounded-3xl overflow-hidden bg-surface-container cursor-pointer hidden md:block shadow-[0_20px_60px_-15px_rgba(148,73,45,0.25)] border border-white/40 hover:shadow-[0_25px_70px_-15px_rgba(148,73,45,0.35)] hover:-translate-y-2 transition-all duration-500">
         <div class="w-full h-full bg-gradient-to-br from-tertiary-fixed to-secondary-container flex items-center justify-center">
-          <span class="material-symbols-outlined text-6xl text-tertiary/30" style="font-variation-settings: 'FILL' 1;">photo_album</span>
+          <span class="material-symbols-outlined text-7xl text-tertiary/20 group-hover:text-tertiary/40 transition-colors duration-300" style="font-variation-settings: 'FILL' 1;">photo_album</span>
         </div>
-        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6">
-          <h4 class="font-label-md text-[18px] text-surface-container-lowest mb-1">示例绘本 3</h4>
-          <p class="font-body-md text-[14px] text-surface-container-lowest/80">即将上线</p>
+        <div class="absolute inset-0 bg-gradient-to-t from-on-surface/95 via-on-surface/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col justify-end p-8">
+          <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+            <h4 class="font-headline-md text-[20px] text-surface-container-lowest mb-2">示例绘本 3</h4>
+            <p class="font-body-md text-[14px] text-surface-container-lowest/80">梦幻童话世界</p>
+            <div class="mt-4 flex items-center gap-2 text-primary-container">
+              <span class="font-label-sm text-sm">查看详情</span>
+              <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <button class="mt-12 text-primary font-label-md text-label-md flex items-center gap-2 hover:opacity-80 transition-opacity text-glow">
+    <button class="mt-12 text-primary font-label-md text-label-md flex items-center gap-2 hover:gap-4 transition-all duration-300 text-glow btn-press">
       查看更多作品 <span class="material-symbols-outlined icon-glow">arrow_forward</span>
     </button>
   </section>
@@ -391,13 +595,20 @@
 <!-- Footer -->
 <footer class="w-full rounded-t-[32px] bg-white/40 backdrop-blur-xl border-t border-white/60 mt-auto z-10 shadow-[inset_0_20px_40px_rgba(255,255,255,0.3)]">
   <div class="max-w-[1100px] mx-auto px-16 py-12 flex flex-col md:flex-row justify-between items-center gap-8">
-    <div class="font-headline-md text-headline-md text-primary text-glow">StoryPebble</div>
-    <div class="flex flex-wrap justify-center gap-6">
-      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">联系我们</a>
-      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">隐私政策</a>
-      <a class="font-body-md text-body-md text-on-surface-variant hover:text-secondary transition-colors" href="#">使用条款</a>
+    <div class="flex items-center gap-3">
+      <svg class="w-8 h-8" fill="none" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <rect fill="#ffb59b" height="28" rx="2" width="20" x="28" y="12"/>
+        <rect fill="#0d696a" height="28" rx="2" width="20" x="20" y="16"/>
+        <rect fill="#94492d" height="28" rx="2" width="20" x="12" y="20"/>
+      </svg>
+      <span class="font-headline-md text-headline-md text-primary text-glow">StoryPebble</span>
     </div>
-    <div class="font-body-md text-body-md text-secondary/80">&copy; 2024 StoryPebble. 用 AI 点亮每一个故事。</div>
+    <div class="flex flex-wrap justify-center gap-8">
+      <a class="font-body-md text-sm text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">联系我们</a>
+      <a class="font-body-md text-sm text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">隐私政策</a>
+      <a class="font-body-md text-sm text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">使用条款</a>
+    </div>
+    <div class="font-body-md text-sm text-secondary/60">&copy; 2024 StoryPebble. 用 AI 点亮每一个故事。</div>
   </div>
 </footer>
 
@@ -455,11 +666,19 @@
   const fileInput = document.getElementById('file-input');
   const fileInfo = document.getElementById('file-info');
   const fileName = document.getElementById('file-name');
+  const fileSize = document.getElementById('file-size');
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
 
   fileInput.addEventListener('change', () => {
     const f = fileInput.files[0];
     if (!f) return;
     fileName.textContent = f.name;
+    fileSize.textContent = formatFileSize(f.size);
     show('file-info');
     uploadFile(f);
   });
@@ -492,16 +711,20 @@
     photoPreview.innerHTML = '';
     photoFiles.forEach((f, idx) => {
       const wrap = document.createElement('div');
-      wrap.className = 'relative group';
+      wrap.className = 'relative group photo-card';
       const img = document.createElement('img');
       img.src = URL.createObjectURL(f);
-      img.className = 'w-20 h-20 object-cover rounded-xl border-2 border-outline-variant shadow-sm';
+      img.className = 'w-24 h-24 object-cover rounded-2xl border-2 border-white shadow-md';
       const btn = document.createElement('button');
-      btn.innerHTML = '&times;';
-      btn.className = 'absolute -top-2 -right-2 w-5 h-5 bg-error text-on-error rounded-full text-xs flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow';
+      btn.className = 'absolute -top-2 -right-2 w-6 h-6 bg-error text-on-error rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all shadow-lg hover:scale-110';
+      btn.innerHTML = '<span class="material-symbols-outlined text-sm">close</span>';
       btn.onclick = () => { photoFiles.splice(idx, 1); renderPhotos(); };
+      const label = document.createElement('p');
+      label.className = 'text-xs text-outline mt-1 text-center truncate max-w-24';
+      label.textContent = f.name;
       wrap.appendChild(img);
       wrap.appendChild(btn);
+      wrap.appendChild(label);
       photoPreview.appendChild(wrap);
     });
   }
@@ -525,6 +748,14 @@
     hide('result-card');
     hide('error-card');
     toggleSidebar(false);
+
+    // Show loading state on upload card
+    const uploadCard = document.getElementById('upload-card');
+    const uploadLabel = document.getElementById('upload-label');
+    const uploadIcon = document.getElementById('upload-icon');
+    uploadLabel.classList.add('upload-loading');
+    uploadIcon.innerHTML = '<div class="spinner w-8 h-8 border-2"></div>';
+
     const formData = new FormData();
     formData.append('file', file);
     for (const p of photoFiles) { formData.append('photos', p); }
@@ -532,6 +763,11 @@
     try {
       const resp = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await resp.json();
+
+      // Reset upload card state
+      uploadLabel.classList.remove('upload-loading');
+      uploadIcon.innerHTML = '<span class="material-symbols-outlined text-3xl text-primary icon-glow" style="font-variation-settings: \'FILL\' 1;">auto_awesome</span>';
+
       if (data.error) { showError(data.error); return; }
       jobId = data.job_id;
       localStorage.setItem('pb_job_id', jobId);
@@ -540,6 +776,9 @@
       document.getElementById('progress-title').textContent = '正在解析文档…';
       startSSE(jobId);
     } catch (e) {
+      // Reset upload card state on error
+      uploadLabel.classList.remove('upload-loading');
+      uploadIcon.innerHTML = '<span class="material-symbols-outlined text-3xl text-primary icon-glow" style="font-variation-settings: \'FILL\' 1;">auto_awesome</span>';
       showError('上传失败：' + e.message);
     }
   }
@@ -570,6 +809,39 @@
     const bar = document.getElementById('progress-bar');
     bar.style.width = (data.progress || 0) + '%';
     document.getElementById('progress-text').textContent = stageLabels[data.stage] || data.stage;
+    document.getElementById('progress-spinner').classList.remove('hidden');
+
+    // Update step indicators
+    const stages = ['parsing', 'outline', 'outline_ready', 'character_sheets', 'generating_images', 'building_pdf', 'done'];
+    const currentIdx = stages.indexOf(data.stage);
+
+    // Step 1: Parsing
+    const step1 = document.getElementById('step-1');
+    const line1 = document.getElementById('step-line-1');
+    if (currentIdx >= 2) {
+      step1.className = 'w-10 h-10 rounded-full step-done flex items-center justify-center transition-all duration-300';
+      line1.style.width = '100%';
+    } else if (currentIdx >= 0) {
+      step1.className = 'w-10 h-10 rounded-full step-active flex items-center justify-center transition-all duration-300';
+    }
+
+    // Step 2: Creating
+    const step2 = document.getElementById('step-2');
+    const line2 = document.getElementById('step-line-2');
+    if (currentIdx >= 5) {
+      step2.className = 'w-10 h-10 rounded-full step-done flex items-center justify-center transition-all duration-300';
+      line2.style.width = '100%';
+    } else if (currentIdx >= 2) {
+      step2.className = 'w-10 h-10 rounded-full step-active flex items-center justify-center transition-all duration-300';
+    }
+
+    // Step 3: Complete
+    const step3 = document.getElementById('step-3');
+    if (currentIdx >= 6) {
+      step3.className = 'w-10 h-10 rounded-full step-done flex items-center justify-center transition-all duration-300';
+    } else if (currentIdx >= 5) {
+      step3.className = 'w-10 h-10 rounded-full step-active flex items-center justify-center transition-all duration-300';
+    }
 
     if (data.stage === 'generating_images') {
       document.getElementById('progress-page').textContent = `正在绘制第 ${data.current_page || 1}/${data.total_pages || '?'} 页…`;
@@ -583,14 +855,17 @@
       if (evtSource) { evtSource.close(); evtSource = null; }
       localStorage.removeItem('pb_job_id');
       hide('progress-card');
+      document.getElementById('progress-spinner').classList.add('hidden');
       show('result-card');
       document.getElementById('result-title').textContent = '《' + (data.title || '我的绘本') + '》';
       document.getElementById('download-btn').href = '/api/download/' + jobId;
+      triggerConfetti();
     }
 
     if (data.stage === 'error') {
       if (evtSource) { evtSource.close(); evtSource = null; }
       localStorage.removeItem('pb_job_id');
+      document.getElementById('progress-spinner').classList.add('hidden');
       showError(data.error, !!data.total_pages);
     }
   }
@@ -689,6 +964,24 @@
     return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
   }
 
+  function triggerConfetti() {
+    const colors = ['#94492d', '#d66b44', '#0d696a', '#ffb59b', '#a3f0f0'];
+    for (let i = 0; i < 50; i++) {
+      setTimeout(() => {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + 'vw';
+        confetti.style.top = '-10px';
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+        confetti.style.width = (Math.random() * 8 + 6) + 'px';
+        confetti.style.height = (Math.random() * 8 + 6) + 'px';
+        document.body.appendChild(confetti);
+        setTimeout(() => confetti.remove(), 3000);
+      }, i * 30);
+    }
+  }
+
   function showError(msg, retryable) {
     hide('progress-card');
     toggleSidebar(false);
@@ -725,6 +1018,14 @@
     hide('file-info');
     fileInput.value = '';
     document.getElementById('sidebar-toggle-btn').classList.add('hidden');
+
+    // Reset step indicators
+    document.getElementById('step-1').className = 'w-10 h-10 rounded-full step-pending flex items-center justify-center transition-all duration-300';
+    document.getElementById('step-2').className = 'w-10 h-10 rounded-full step-pending flex items-center justify-center transition-all duration-300';
+    document.getElementById('step-3').className = 'w-10 h-10 rounded-full step-pending flex items-center justify-center transition-all duration-300';
+    document.getElementById('step-line-1').style.width = '0%';
+    document.getElementById('step-line-2').style.width = '0%';
+    document.getElementById('progress-bar').style.width = '0%';
   }
 
   async function restoreJob() {
