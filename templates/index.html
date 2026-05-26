@@ -359,6 +359,11 @@
   </section>
 </main>
 
+<!-- Floating button to reopen sidebar -->
+<button id="sidebar-toggle-btn" class="hidden fixed right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-gradient-to-r from-[#d66b44] to-primary text-white shadow-lg hover:shadow-xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center" onclick="toggleSidebar(true)">
+  <span class="material-symbols-outlined" style="font-size:20px;">edit_note</span>
+</button>
+
 <!-- Outline Sidebar -->
 <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
 <div id="outline-sidebar" class="sidebar-panel">
@@ -438,6 +443,13 @@
     document.getElementById('outline-sidebar').classList.toggle('open', open);
     document.getElementById('sidebar-backdrop').classList.toggle('active', open);
     document.body.style.overflow = open ? 'hidden' : '';
+    // Show reopen button when sidebar is closed (only if outline exists)
+    const btn = document.getElementById('sidebar-toggle-btn');
+    if (!open && document.getElementById('outline-pages').children.length > 0) {
+      btn.classList.remove('hidden');
+    } else {
+      btn.classList.add('hidden');
+    }
   }
 
   const fileInput = document.getElementById('file-input');
@@ -712,6 +724,7 @@
     toggleSidebar(false);
     hide('file-info');
     fileInput.value = '';
+    document.getElementById('sidebar-toggle-btn').classList.add('hidden');
   }
 
   async function restoreJob() {
