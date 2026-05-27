@@ -35,11 +35,7 @@ IMAGE_PROMPT_TEMPLATE = """你是一位专业的儿童绘本插画师。
 {character_block}
 
 ## 风格要求
-- 迪士尼皮克斯 3D 动画风格
-- 明亮温暖的色调，主色调为橙色、绿色、蓝色
-- 角色有大眼睛、圆润的线条
-- 背景简洁，有柔和的光线
-- 16:9 比例，4K 分辨率
+{style_block}
 
 ## 场景文字（可选）
 允许画面中出现与场景融为一体的装饰性文字，如路牌、招牌、店铺名、书名等。
@@ -51,21 +47,29 @@ IMAGE_PROMPT_TEMPLATE = """你是一位专业的儿童绘本插画师。
 - 禁止出现 Markdown 符号（# * 等）
 - 禁止风格突变"""
 
+DEFAULT_STYLE_BLOCK = """- 迪士尼皮克斯 3D 动画风格
+- 明亮温暖的色调，主色调为橙色、绿色、蓝色
+- 角色有大眼睛、圆润的线条
+- 背景简洁，有柔和的光线
+- 16:9 比例，4K 分辨率"""
+
 
 PHOTO_REFERENCE_BLOCK = """
 ## 人物参考（重要）
 参考附带的人物照片，将照片中人物的面部特征、发型、肤色融入到绘本角色设计中。
-角色应保持迪士尼皮克斯 3D 动画风格，但要能辨认出是照片中的人物。
+角色应保持当前绘本的画风风格，但要能辨认出是照片中的人物。
 照片中的人物应自然地出现在绘本场景中，与故事内容融为一体。"""
 
 
-def build_image_prompt(page: dict, page_num: int, character_desc: str = "", has_photo: bool = False) -> str:
+def build_image_prompt(page: dict, page_num: int, character_desc: str = "", has_photo: bool = False, template: dict | None = None) -> str:
+    style_block = template["image_prompt_style"] if template and template.get("image_prompt_style") else DEFAULT_STYLE_BLOCK
     prompt = IMAGE_PROMPT_TEMPLATE.format(
         page_num=page_num,
         title=page.get("title", ""),
         content=page.get("text", ""),
         scene=page.get("illustration", ""),
         character_block=character_desc,
+        style_block=style_block,
     )
     if has_photo:
         prompt += PHOTO_REFERENCE_BLOCK
@@ -117,16 +121,22 @@ class JobStore:
         except sqlite3.OperationalError:
             self._conn.execute("ALTER TABLE jobs ADD COLUMN photo_urls TEXT")
             self._conn.commit()
+        # Migrate: add template_id column if missing
+        try:
+            self._conn.execute("SELECT template_id FROM jobs LIMIT 1")
+        except sqlite3.OperationalError:
+            self._conn.execute("ALTER TABLE jobs ADD COLUMN template_id TEXT")
+            self._conn.commit()
         self._conn.commit()
 
-    def create(self, job_id: str, doc_path: str, photo_urls: list[str] | None = None):
+    def create(self, job_id: str, doc_path: str, photo_urls: list[str] | None = None, template_id: str = "default"):
         now = time.time()
-        jobs[job_id] = {"stage": "starting", "progress": 0}
+        jobs[job_id] = {"stage": "starting", "progress": 0, "template_id": template_id}
         photo_json = json.dumps(photo_urls, ensure_ascii=False) if photo_urls else None
         with self._lock:
             self._conn.execute(
-                "INSERT INTO jobs (job_id, stage, progress, doc_path, photo_urls, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-                (job_id, "starting", 0, doc_path, photo_json, now, now),
+                "INSERT INTO jobs (job_id, stage, progress, doc_path, photo_urls, template_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                (job_id, "starting", 0, doc_path, photo_json, template_id, now, now),
             )
             self._conn.commit()
 
@@ -158,16 +168,17 @@ class JobStore:
         """Restore jobs from SQLite into memory on startup."""
         with self._lock:
             cur = self._conn.execute(
-                "SELECT job_id, stage, progress, title, filename, pdf_path, doc_path, photo_urls, error FROM jobs"
+                "SELECT job_id, stage, progress, title, filename, pdf_path, doc_path, photo_urls, template_id, error FROM jobs"
             )
             rows = cur.fetchall()
         for row in rows:
-            jid, stage, prog, title, fn, pdf, doc, photo_json, err = row
+            jid, stage, prog, title, fn, pdf, doc, photo_json, template_id, err = row
             if stage in ("done", "error"):
                 continue
             restored = {"stage": "interrupted", "progress": prog, "title": title or ""}
             if photo_json:
                 restored["photo_urls"] = json.loads(photo_json)
+            restored["template_id"] = template_id or "default"
             if stage == "outline_ready":
                 restored["stage"] = "outline_ready"
             jobs[jid] = restored
@@ -227,11 +238,221 @@ def _get_job_lock(job_id: str) -> threading.Lock:
         return _job_locks[job_id]
 
 
-def parse_and_outline(job_id: str, doc_path: str, filename: str):
+# ---------------------------------------------------------------------------
+# Template store
+# ---------------------------------------------------------------------------
+class TemplateStore:
+    """Persists template definitions to SQLite."""
+
+    def __init__(self, db_path: str = "data/jobs.db"):
+        self._lock = threading.Lock()
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS templates (
+                template_id          TEXT PRIMARY KEY,
+                name                 TEXT NOT NULL,
+                description          TEXT,
+                category             TEXT,
+                image_prompt_style   TEXT NOT NULL,
+                character_prompt_style TEXT NOT NULL,
+                color_palette        TEXT,
+                preview_image        TEXT,
+                is_default           INTEGER DEFAULT 0,
+                sort_order           INTEGER DEFAULT 0,
+                created_at           REAL NOT NULL
+            )
+        """)
+        self._conn.commit()
+
+    def get_all(self) -> list[dict]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT template_id, name, description, category, image_prompt_style, "
+                "character_prompt_style, color_palette, preview_image, is_default, sort_order "
+                "FROM templates ORDER BY sort_order"
+            )
+            rows = cur.fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def get(self, template_id: str) -> dict | None:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT template_id, name, description, category, image_prompt_style, "
+                "character_prompt_style, color_palette, preview_image, is_default, sort_order "
+                "FROM templates WHERE template_id=?", (template_id,)
+            )
+            row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_default(self) -> dict | None:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT template_id, name, description, category, image_prompt_style, "
+                "character_prompt_style, color_palette, preview_image, is_default, sort_order "
+                "FROM templates WHERE is_default=1 LIMIT 1"
+            )
+            row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    @staticmethod
+    def _row_to_dict(row) -> dict:
+        keys = ("template_id", "name", "description", "category", "image_prompt_style",
+                "character_prompt_style", "color_palette", "preview_image", "is_default", "sort_order")
+        d = dict(zip(keys, row))
+        if d.get("color_palette"):
+            try:
+                d["color_palette"] = json.loads(d["color_palette"])
+            except (json.JSONDecodeError, TypeError):
+                d["color_palette"] = []
+        else:
+            d["color_palette"] = []
+        return d
+
+
+def seed_templates(store: TemplateStore):
+    """Insert default templates if the table is empty."""
+    existing = store.get_all()
+    if existing:
+        return
+
+    now = time.time()
+    templates = [
+        {
+            "template_id": "default",
+            "name": "迪士尼3D",
+            "description": "明亮温暖的3D动画风格，适合大多数绘本故事",
+            "category": "3D动画",
+            "image_prompt_style": DEFAULT_STYLE_BLOCK,
+            "character_prompt_style": """## 风格
+迪士尼皮克斯 3D 动画风格
+明亮温暖的色调，橙色/绿色/蓝色配色
+大而有神的眼睛，圆润柔和的线条""",
+            "color_palette": json.dumps(["#FF8A65", "#4DB6AC", "#7986CB"]),
+            "preview_image": "default.png",
+            "is_default": 1,
+            "sort_order": 0,
+        },
+        {
+            "template_id": "watercolor",
+            "name": "水彩手绘",
+            "description": "柔和晕染的水彩质感，梦幻温馨",
+            "category": "手绘风",
+            "image_prompt_style": """- 水彩手绘风格，笔触自然，颜料晕染效果
+- 柔和的暖色调，以粉色、淡蓝、鹅黄为主
+- 纸质纹理背景，边缘有水彩飞白效果
+- 梦幻柔和的光影
+- 16:9 比例，4K 分辨率""",
+            "character_prompt_style": """## 风格
+水彩手绘风格，笔触自然，颜料晕染效果
+柔和的暖色调，粉色/淡蓝/鹅黄配色
+纸质纹理，水彩飞白效果""",
+            "color_palette": json.dumps(["#F8BBD0", "#B3E5FC", "#FFF9C4"]),
+            "preview_image": "watercolor.png",
+            "is_default": 0,
+            "sort_order": 1,
+        },
+        {
+            "template_id": "ink-wash",
+            "name": "中国水墨",
+            "description": "传统水墨画风，意境深远，适合古典故事",
+            "category": "国风",
+            "image_prompt_style": """- 中国传统水墨画风格，笔墨浓淡相宜
+- 黑白灰为主色调，点缀少量朱红、石青
+- 宣纸质感，留白意境深远
+- 山水、花鸟元素自然融入背景
+- 16:9 比例，4K 分辨率""",
+            "character_prompt_style": """## 风格
+中国传统水墨画风格，笔墨浓淡相宜
+黑白灰为主，点缀朱红、石青
+宣纸质感，留白意境""",
+            "color_palette": json.dumps(["#424242", "#B0BEC5", "#E53935"]),
+            "preview_image": "ink-wash.png",
+            "is_default": 0,
+            "sort_order": 2,
+        },
+        {
+            "template_id": "anime",
+            "name": "日系动漫",
+            "description": "精致的日系动漫画风，色彩鲜明",
+            "category": "动漫",
+            "image_prompt_style": """- 日系动漫插画风格，精致细腻的线条
+- 鲜明饱和的色彩，渐变丰富
+- 大而有神的眼睛，精致的五官比例
+- 唯美光影，樱花/星空等浪漫元素
+- 16:9 比例，4K 分辨率""",
+            "character_prompt_style": """## 风格
+日系动漫插画风格，精致细腻的线条
+鲜明饱和的色彩，渐变丰富
+大而有神的眼睛，精致五官""",
+            "color_palette": json.dumps(["#E91E63", "#9C27B0", "#2196F3"]),
+            "preview_image": "anime.png",
+            "is_default": 0,
+            "sort_order": 3,
+        },
+        {
+            "template_id": "paper-cut",
+            "name": "剪纸风",
+            "description": "中国传统剪纸艺术，层次分明的平面美学",
+            "category": "传统艺术",
+            "image_prompt_style": """- 中国剪纸艺术风格，层次分明的平面构成
+- 大红、金色、翠绿等传统色彩
+- 镂空剪影效果，边缘整齐利落
+- 民间装饰纹样融入背景
+- 16:9 比例，4K 分辨率""",
+            "character_prompt_style": """## 风格
+中国剪纸艺术风格，平面构成
+大红、金色、翠绿传统色彩
+镂空剪影效果，边缘整齐""",
+            "color_palette": json.dumps(["#D32F2F", "#FFD600", "#2E7D32"]),
+            "preview_image": "paper-cut.png",
+            "is_default": 0,
+            "sort_order": 4,
+        },
+        {
+            "template_id": "crayon",
+            "name": "蜡笔童趣",
+            "description": "童真蜡笔画风，适合低龄儿童绘本",
+            "category": "童趣",
+            "image_prompt_style": """- 蜡笔绘画风格，笔触粗犷有质感
+- 明亮大胆的色彩，红黄蓝绿为主
+- 稚拙可爱的造型，比例夸张有趣
+- 纸张纹理明显，有蜡笔涂抹的颗粒感
+- 16:9 比例，4K 分辨率""",
+            "character_prompt_style": """## 风格
+蜡笔绘画风格，笔触粗犷有质感
+明亮大胆的色彩，红黄蓝绿
+稚拙可爱的造型，比例夸张""",
+            "color_palette": json.dumps(["#F44336", "#FFEB3B", "#2196F3"]),
+            "preview_image": "crayon.png",
+            "is_default": 0,
+            "sort_order": 5,
+        },
+    ]
+
+    with store._lock:
+        for t in templates:
+            store._conn.execute(
+                "INSERT INTO templates (template_id, name, description, category, "
+                "image_prompt_style, character_prompt_style, color_palette, preview_image, "
+                "is_default, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (t["template_id"], t["name"], t["description"], t["category"],
+                 t["image_prompt_style"], t["character_prompt_style"], t["color_palette"],
+                 t["preview_image"], t["is_default"], t["sort_order"], now),
+            )
+        store._conn.commit()
+    print(f"[templates] seeded {len(templates)} default templates")
+
+
+def parse_and_outline(job_id: str, doc_path: str, filename: str, template_id: str = "default"):
     """Phase 1-2: parse document → generate outline. Stops at outline_ready."""
     job = jobs[job_id]
     job_dir = OUTPUT_DIR / job_id
     job_dir.mkdir(exist_ok=True)
+
+    # Look up template for style-aware outline generation
+    template = template_store.get(template_id) if template_store else None
 
     try:
         job["stage"] = "parsing"
@@ -248,7 +469,7 @@ def parse_and_outline(job_id: str, doc_path: str, filename: str):
             job["stage"] = "outline"
             job["progress"] = 30
             job_store.update(job_id, stage="outline", progress=30)
-            outline = generate_outline(text)
+            outline = generate_outline(text, template=template)
             outline_path.write_text(json.dumps(outline, ensure_ascii=False, indent=2), encoding="utf-8")
 
         job["title"] = outline.get("title", "My Picture Book")
@@ -263,10 +484,13 @@ def parse_and_outline(job_id: str, doc_path: str, filename: str):
         job_store.update(job_id, stage="error", error=str(e))
 
 
-def generate_book(job_id: str, photo_urls: list[str] | None = None, lock: threading.Lock | None = None):
+def generate_book(job_id: str, photo_urls: list[str] | None = None, lock: threading.Lock | None = None, template_id: str = "default"):
     """Phase 3-5: character sheets → page images → PDF. Reads outline from disk."""
     job = jobs[job_id]
     job_dir = OUTPUT_DIR / job_id
+
+    # Look up template
+    template = template_store.get(template_id) if template_store else None
 
     try:
         outline_path = job_dir / "outline.json"
@@ -283,11 +507,12 @@ def generate_book(job_id: str, photo_urls: list[str] | None = None, lock: thread
             job["stage"] = "character_sheets"
             job["total_characters"] = len(characters)
             job_store.update(job_id, stage="character_sheets")
+            char_style = template["character_prompt_style"] if template and template.get("character_prompt_style") else ""
             for ci, char in enumerate(characters):
                 job["current_character"] = ci + 1
                 job["progress"] = int((ci / max(len(characters), 1)) * 10)
                 if not job.get("character_sheets") or ci >= len(job.get("character_sheets", [])):
-                    sheet_prompt = build_character_sheet_prompt(char)
+                    sheet_prompt = build_character_sheet_prompt(char, style_override=char_style)
                     url = draw(prompt=sheet_prompt)
                     job.setdefault("character_sheets", []).append(
                         {"name": char.get("name", ""), "url": url}
@@ -322,7 +547,7 @@ def generate_book(job_id: str, photo_urls: list[str] | None = None, lock: thread
 
             # draw() 只调一次，避免重复生成浪费 API
             try:
-                prompt = build_image_prompt(page, i + 1, char_desc, has_photo=bool(ref_images))
+                prompt = build_image_prompt(page, i + 1, char_desc, has_photo=bool(ref_images), template=template)
                 url = draw(prompt=prompt, images=ref_images or None)
             except Exception as e:
                 print(f"[page {i+1}] draw failed: {e}")
@@ -406,9 +631,10 @@ def upload():
             mime = pf.content_type or "image/jpeg"
             photo_urls.append(f"data:{mime};base64,{b64}")
 
-    job_store.create(job_id, str(doc_path), photo_urls)
+    template_id = request.form.get("template_id", "default")
+    job_store.create(job_id, str(doc_path), photo_urls, template_id=template_id)
     threading.Thread(
-        target=parse_and_outline, args=(job_id, str(doc_path), filename), daemon=True
+        target=parse_and_outline, args=(job_id, str(doc_path), filename, template_id), daemon=True
     ).start()
 
     return jsonify({"job_id": job_id})
@@ -457,10 +683,11 @@ def generate(job_id):
         if job.get("stage") != "outline_ready":
             return jsonify({"error": "Not ready to generate"}), 400
         photo_urls = job.get("photo_urls", [])
+        template_id = job.get("template_id", "default")
         job["progress"] = 0
         job_store.update(job_id, stage="character_sheets", progress=0)
         threading.Thread(
-            target=generate_book, args=(job_id, photo_urls, lock), daemon=True
+            target=generate_book, args=(job_id, photo_urls, lock, template_id), daemon=True
         ).start()
     except Exception:
         lock.release()
@@ -484,8 +711,9 @@ def retry(job_id):
         job["progress"] = 0
         job_store.update(job_id, stage="generating_images", progress=0, error=None)
         photo_urls = job.get("photo_urls", [])
+        template_id = job.get("template_id", "default")
         threading.Thread(
-            target=generate_book, args=(job_id, photo_urls, lock), daemon=True
+            target=generate_book, args=(job_id, photo_urls, lock, template_id), daemon=True
         ).start()
     except Exception:
         lock.release()
@@ -546,9 +774,40 @@ def gallery_image(filename):
     return send_file(str(file_path), mimetype="image/png")
 
 
+@app.get("/api/templates")
+def list_templates():
+    """Return all available templates."""
+    templates = template_store.get_all()
+    return jsonify(templates)
+
+
+@app.get("/api/templates/<template_id>")
+def get_template(template_id):
+    """Return a single template by ID."""
+    t = template_store.get(template_id)
+    if not t:
+        return jsonify({"error": "Template not found"}), 404
+    return jsonify(t)
+
+
+@app.get("/templates/preview/<filename>")
+def template_preview(filename):
+    """Serve template preview images."""
+    preview_dir = OUTPUT_DIR / "templates"
+    file_path = preview_dir / filename
+    if not file_path.exists():
+        return jsonify({"error": "Preview not found"}), 404
+    return send_file(str(file_path), mimetype="image/png")
+
+
+template_store = TemplateStore()
+
 if __name__ == "__main__":
     # Restore jobs from previous session
     job_store.load_existing()
+
+    # Seed default templates
+    seed_templates(template_store)
 
     # Start background cleanup thread (default: purge jobs older than 24h)
     cleanup_thread = threading.Thread(target=_run_cleanup_loop, daemon=True)

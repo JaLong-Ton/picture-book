@@ -14,20 +14,22 @@ OUTLINE_PROMPT = """你是一位世界级的儿童绘本设计师和故事讲述
 ## 文档内容
 {text}
 
+{style_guidance}
+
 ## 输出要求
 
 ### 角色设定
 提取故事中所有主要角色，为每个角色提供：
 - **name**：角色名
 - **species**：物种（如：小狐狸、小女孩、机器人）
-- **appearance**：详细外观描述（用于 AI 图片生成），包括体型、毛发/肤色、眼睛、服装、配饰等
+- **appearance**：详细外观描述（用于 AI 图片生成），包括体型、毛发/肤色、眼睛、服装、配饰等。外观描述应贴合所选画风的视觉特征。
 
 ### 每页内容
 为每一页提供：
 1. **标题**：叙事性标题（不是"标题：副标题"格式）
 2. **叙事目标**：这一页在故事中的作用
 3. **关键内容**：要展示的文字（简短、适合儿童的句子）
-4. **视觉画面**：场景、角色动作、表情（用于 AI 图片生成）
+4. **视觉画面**：场景、角色动作、表情（用于 AI 图片生成），描述应贴合所选画风
 5. **布局**：构图建议
 
 ## 禁止事项
@@ -57,6 +59,16 @@ OUTLINE_PROMPT = """你是一位世界级的儿童绘本设计师和故事讲述
     }
   ]
 }"""
+
+DEFAULT_STYLE_GUIDANCE = """## 画风设定
+本绘本采用 **迪士尼皮克斯 3D 动画风格**。
+- 角色外观应体现 3D 渲染质感：圆润柔和的线条、大而有神的眼睛、明亮温暖的色调
+- 场景描述应适合 3D 动画表现：简洁的背景、柔和的光影、橙色/绿色/蓝色为主色调"""
+
+STYLE_GUIDANCE_TEMPLATE = """## 画风设定
+本绘本采用 **{style_name}**。
+{style_details}
+- 角色外观描述和场景描述应贴合此画风的视觉特征"""
 
 CHARACTER_SHEET_PROMPT = """为以下儿童绘本角色创建角色设定图。
 
@@ -132,8 +144,15 @@ def _parse_json(text: str) -> dict:
     raise ValueError(f"LLM 输出不是合法 JSON: {text[:200]}...")
 
 
-def generate_outline(text: str, max_pages: int = 6) -> dict:
-    prompt = OUTLINE_PROMPT.replace("{text}", text[:8000])
+def generate_outline(text: str, max_pages: int = 6, template: dict | None = None) -> dict:
+    if template and template.get("name"):
+        style_guidance = STYLE_GUIDANCE_TEMPLATE.format(
+            style_name=template["name"],
+            style_details=template.get("image_prompt_style", ""),
+        )
+    else:
+        style_guidance = DEFAULT_STYLE_GUIDANCE
+    prompt = OUTLINE_PROMPT.replace("{text}", text[:8000]).replace("{style_guidance}", style_guidance)
     outline = None
     for attempt in range(3):
         content = _call_llm(prompt)
@@ -156,8 +175,16 @@ def generate_outline(text: str, max_pages: int = 6) -> dict:
     return outline
 
 
-def build_character_sheet_prompt(character: dict) -> str:
-    return CHARACTER_SHEET_PROMPT.format(
+def build_character_sheet_prompt(character: dict, style_override: str = "") -> str:
+    prompt = CHARACTER_SHEET_PROMPT
+    if style_override:
+        # Replace the hardcoded style block with the template's style
+        old_style = """## 风格
+迪士尼皮克斯 3D 动画风格
+明亮温暖的色调，橙色/绿色/蓝色配色
+大而有神的眼睛，圆润柔和的线条"""
+        prompt = prompt.replace(old_style, f"## 风格\n{style_override}")
+    return prompt.format(
         name=character.get("name", ""),
         species=character.get("species", ""),
         appearance=character.get("appearance", ""),

@@ -88,6 +88,7 @@
 <style>
   html {
     scroll-behavior: smooth;
+    scroll-padding-top: 4.5rem;
   }
   body {
     background-color: #FFF2E8;
@@ -294,6 +295,160 @@
     color: #94492d;
     font-weight: 600;
   }
+
+  /* Template cards */
+  .template-card {
+    width: 260px;
+    flex-shrink: 0;
+    border-radius: 24px;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    background: rgba(255,255,255,0.5);
+    border: 2px solid transparent;
+    box-shadow: 0 20px 60px -15px rgba(148,73,45,0.2);
+    transition: all 0.4s ease;
+  }
+  .template-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 28px 70px -15px rgba(148,73,45,0.3);
+  }
+  .template-card.selected {
+    border-color: #94492d;
+    box-shadow: 0 0 0 3px rgba(148,73,45,0.3), 0 20px 60px -15px rgba(148,73,45,0.25);
+  }
+  .template-card .preview-area {
+    aspect-ratio: 4/3;
+    overflow: hidden;
+    position: relative;
+  }
+  .template-card .preview-area img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.7s ease;
+  }
+  .template-card:hover .preview-area img {
+    transform: scale(1.1);
+  }
+  .template-card .preview-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+  }
+  .template-card .card-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(27,28,28,0.95), rgba(27,28,28,0.2), transparent);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 24px;
+  }
+  .template-card:hover .card-overlay {
+    opacity: 1;
+  }
+  .template-card .selected-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    background: #94492d;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(148,73,45,0.4);
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+  .template-card.selected .selected-badge {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .template-card .palette-dots {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    display: flex;
+    gap: 6px;
+  }
+  .template-card .palette-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.6);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .template-card .card-info {
+    padding: 16px;
+  }
+  .template-card .card-info h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1b1c1c;
+    margin-bottom: 4px;
+  }
+  .template-card .card-info p {
+    font-size: 13px;
+    color: #87736c;
+    line-height: 1.4;
+  }
+  .template-card .category-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    background: rgba(148,73,45,0.08);
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #94492d;
+    margin-bottom: 8px;
+  }
+
+  /* Category pill */
+  .cat-pill {
+    padding: 8px 20px;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: rgba(255,255,255,0.5);
+    color: #87736c;
+    border: 1px solid rgba(148,73,45,0.1);
+  }
+  .cat-pill:hover {
+    background: rgba(255,219,207,0.4);
+    color: #94492d;
+  }
+  .cat-pill.active {
+    background: #94492d;
+    color: #fff;
+    border-color: #94492d;
+    box-shadow: 0 4px 12px rgba(148,73,45,0.3);
+  }
+
+  /* Scrollbar styling for template grid */
+  #template-grid-wrap::-webkit-scrollbar {
+    height: 6px;
+  }
+  #template-grid-wrap::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  #template-grid-wrap::-webkit-scrollbar-thumb {
+    background: rgba(148,73,45,0.2);
+    border-radius: 3px;
+  }
+  #template-grid-wrap::-webkit-scrollbar-thumb:hover {
+    background: rgba(148,73,45,0.4);
+  }
 </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col relative">
@@ -322,6 +477,7 @@
       </a>
       <div class="hidden md:flex items-center gap-6">
         <a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md transition-colors duration-300" href="#">首页</a>
+        <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#templates">模板市场</a>
         <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#how-it-works">使用方法</a>
         <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#gallery">作品展示</a>
       </div>
@@ -389,7 +545,31 @@
         </label>
         <div id="photo-preview" class="hidden mx-4 mb-4 flex flex-wrap gap-3 justify-center"></div>
       </div>
+
+      <!-- Selected template indicator -->
+      <div id="style-indicator" class="hidden file-chip mt-4 mx-auto">
+        <span class="material-symbols-outlined text-sm text-primary" style="font-variation-settings: 'FILL' 1;">palette</span>
+        <span id="style-indicator-text" class="font-label-sm text-primary"></span>
+        <button onclick="selectTemplate('default')" class="text-outline hover:text-error transition-colors">
+          <span class="material-symbols-outlined text-sm">close</span>
+        </button>
+      </div>
     </div>
+  </section>
+
+  <!-- Template Marketplace Section -->
+  <section class="w-full py-16 flex flex-col items-center z-10" id="templates">
+    <h2 class="font-headline-md text-headline-md text-on-surface mb-4 text-glow">模板市场</h2>
+    <p class="font-body-md text-on-surface-variant mb-8 text-center">选择一种画风，让你的绘本独具特色</p>
+
+    <!-- Category filter pills -->
+    <div id="template-categories" class="flex flex-wrap gap-3 mb-8 justify-center"></div>
+
+    <!-- Template grid (horizontal scroll) -->
+    <div id="template-grid-wrap" class="w-full overflow-x-auto pb-4 -mx-2 px-2">
+      <div id="template-grid" class="flex gap-6 min-w-max"></div>
+    </div>
+
   </section>
 
   <!-- Progress Card (hidden by default) -->
@@ -644,6 +824,114 @@
   function show(id) { document.getElementById(id).classList.remove('hidden'); }
   function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
+  // ── Template Marketplace ──
+  let selectedTemplateId = 'default';
+  let allTemplates = [];
+  let activeCategory = null;
+
+  async function loadTemplates() {
+    try {
+      const resp = await fetch('/api/templates');
+      if (!resp.ok) return;
+      allTemplates = await resp.json();
+      renderCategoryPills(allTemplates);
+      renderTemplateCards(allTemplates);
+    } catch (e) {
+      console.warn('Failed to load templates:', e);
+    }
+  }
+
+  function renderCategoryPills(templates) {
+    const categories = [...new Set(templates.map(t => t.category))];
+    const container = document.getElementById('template-categories');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const allPill = document.createElement('button');
+    allPill.className = 'cat-pill active';
+    allPill.textContent = '全部';
+    allPill.onclick = () => filterTemplates(null);
+    container.appendChild(allPill);
+
+    categories.forEach(cat => {
+      const pill = document.createElement('button');
+      pill.className = 'cat-pill';
+      pill.textContent = cat;
+      pill.dataset.category = cat;
+      pill.onclick = () => filterTemplates(cat);
+      container.appendChild(pill);
+    });
+  }
+
+  function filterTemplates(category) {
+    activeCategory = category;
+    document.querySelectorAll('.cat-pill').forEach(p => {
+      p.classList.toggle('active', category === null ? p.textContent === '全部' : p.dataset.category === category);
+    });
+    const filtered = category ? allTemplates.filter(t => t.category === category) : allTemplates;
+    renderTemplateCards(filtered);
+  }
+
+  function renderTemplateCards(templates) {
+    const grid = document.getElementById('template-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    templates.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'template-card' + (t.template_id === selectedTemplateId ? ' selected' : '');
+      card.dataset.templateId = t.template_id;
+      card.onclick = () => selectTemplate(t.template_id);
+
+      const palette = Array.isArray(t.color_palette) ? t.color_palette : [];
+
+      card.innerHTML = `
+        <div class="preview-area">
+          ${t.preview_image
+            ? `<img src="/templates/preview/${t.preview_image}" alt="${esc(t.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+            : ''}
+          <div class="preview-placeholder" style="${t.preview_image ? 'display:none' : ''};background:linear-gradient(135deg,${palette[0] || '#ffdbcf'},${palette[1] || '#a3f0f0'},${palette[2] || '#eee0d5'})">
+            <span class="material-symbols-outlined" style="font-size:48px;color:rgba(255,255,255,0.8)">auto_awesome</span>
+          </div>
+          <div class="card-overlay">
+            <h4 style="font-size:18px;font-weight:600;color:#fff;margin-bottom:4px">${esc(t.name)}</h4>
+            <p style="font-size:13px;color:rgba(255,255,255,0.8)">${esc(t.description || '')}</p>
+          </div>
+          <div class="selected-badge">
+            <span class="material-symbols-outlined text-white" style="font-size:18px">check</span>
+          </div>
+          <div class="palette-dots">
+            ${palette.map(c => `<div class="palette-dot" style="background:${c}"></div>`).join('')}
+          </div>
+        </div>
+        <div class="card-info">
+          <span class="category-tag">${esc(t.category || '')}</span>
+          <h4>${esc(t.name)}</h4>
+          <p>${esc(t.description || '')}</p>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function selectTemplate(templateId) {
+    selectedTemplateId = templateId;
+    document.querySelectorAll('.template-card').forEach(card => {
+      card.classList.toggle('selected', card.dataset.templateId === templateId);
+    });
+    const indicator = document.getElementById('style-indicator');
+    const indicatorText = document.getElementById('style-indicator-text');
+    if (templateId === 'default') {
+      hide('style-indicator');
+    } else {
+      const tpl = allTemplates.find(t => t.template_id === templateId);
+      if (tpl) {
+        indicatorText.textContent = '画风：' + tpl.name;
+        show('style-indicator');
+      }
+    }
+  }
+
   function toggleSidebar(open) {
     document.getElementById('outline-sidebar').classList.toggle('open', open);
     document.getElementById('sidebar-backdrop').classList.toggle('active', open);
@@ -752,6 +1040,7 @@
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('template_id', selectedTemplateId);
     for (const p of photoFiles) { formData.append('photos', p); }
 
     try {
@@ -1047,7 +1336,54 @@
     } catch { localStorage.removeItem('pb_job_id'); }
   }
 
+  loadTemplates();
   restoreJob();
 </script>
-</body>
+<script>
+(function() {
+  var navLinks = document.querySelectorAll('nav a[href^="#"]');
+  var clickingNav = false;
+  function setActiveLink(activeHref) {
+    navLinks.forEach(function(link) {
+      var href = link.getAttribute('href');
+      var isActive = href === activeHref;
+      if (isActive) {
+        link.classList.add('text-primary', 'font-bold', 'border-b-2', 'border-primary', 'pb-1');
+        link.classList.remove('text-on-surface-variant');
+      } else {
+        link.classList.remove('text-primary', 'font-bold', 'border-b-2', 'border-primary', 'pb-1');
+        link.classList.add('text-on-surface-variant');
+      }
+    });
+  }
+  navLinks.forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      var href = link.getAttribute('href');
+      if (href === '#') {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        var target = document.querySelector(href);
+        if (!target) return;
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      setActiveLink(href);
+      clickingNav = true;
+      setTimeout(function() { clickingNav = false; }, 800);
+    });
+  });
+  var navSections = ['templates', 'how-it-works', 'gallery'];
+  window.addEventListener('scroll', function() {
+    if (clickingNav) return;
+    var scrollY = window.scrollY + 100;
+    var current = '';
+    navSections.forEach(function(id) {
+      var section = document.getElementById(id);
+      if (section && section.offsetTop <= scrollY) current = id;
+    });
+    setActiveLink(current ? '#' + current : '#');
+  });
+})();
+</script>
 </html>
