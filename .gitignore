@@ -1,10 +1,35 @@
-.env
-.venv/
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.env
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Runtime data (generated when running the app)
 data/
 outputs/
 uploads/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# AI assistant config
+.claude/
 .agents/
 skills-lock.json
-static/
+.mcp.json
+.playwright-mcp/
+
+# Other artifacts
+stitch.html
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

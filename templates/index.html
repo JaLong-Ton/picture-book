@@ -88,7 +88,7 @@
 <style>
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 4.5rem;
+    scroll-padding-top: 5rem;
   }
   body {
     background-color: #FFF2E8;
@@ -475,8 +475,8 @@
         </svg>
         <span class="font-headline-md text-headline-md text-primary text-glow">StoryPebble</span>
       </a>
-      <div class="hidden md:flex items-center gap-6">
-        <a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-md text-label-md transition-colors duration-300" href="#">首页</a>
+      <div id="nav-links" class="hidden md:flex items-center gap-6">
+        <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#">首页</a>
         <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#templates">模板市场</a>
         <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#how-it-works">使用方法</a>
         <a class="text-on-surface-variant hover:text-primary font-label-md text-label-md transition-colors duration-300" href="#gallery">作品展示</a>
@@ -666,7 +666,6 @@
         <p class="font-body-md text-sm text-on-surface-variant">上传你的故事文稿，支持 PDF、Word、TXT 格式。</p>
       </div>
       <div class="glass-card-step rounded-2xl p-8 flex flex-col items-center text-center relative group hover:scale-105 transition-all duration-300" style="animation-delay: 1s;">
-        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-gradient-to-r from-primary to-secondary"></div>
         <div class="w-16 h-16 bg-secondary-fixed rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(163,240,240,0.8)] group-hover:shadow-[0_0_30px_rgba(163,240,240,1)] transition-shadow">
           <span class="material-symbols-outlined text-secondary text-3xl icon-glow">draw</span>
         </div>
@@ -675,7 +674,6 @@
         <p class="font-body-md text-sm text-on-surface-variant">AI 自动分镜并生成精美的绘本插画。</p>
       </div>
       <div class="glass-card-step rounded-2xl p-8 flex flex-col items-center text-center relative group hover:scale-105 transition-all duration-300" style="animation-delay: 2s;">
-        <div class="hidden md:block absolute top-1/2 -left-4 w-8 h-[2px] bg-gradient-to-r from-secondary to-tertiary"></div>
         <div class="w-16 h-16 bg-tertiary-fixed rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(238,224,213,0.8)] group-hover:shadow-[0_0_30px_rgba(238,224,213,1)] transition-shadow">
           <span class="material-symbols-outlined text-tertiary text-3xl icon-glow">download</span>
         </div>
@@ -768,7 +766,7 @@
 
 <!-- Footer -->
 <footer class="w-full rounded-t-[32px] bg-white/40 backdrop-blur-xl border-t border-white/60 mt-auto z-10 shadow-[inset_0_20px_40px_rgba(255,255,255,0.3)]">
-  <div class="max-w-[1100px] mx-auto px-16 py-12 flex flex-col md:flex-row justify-between items-center gap-8">
+  <div class="max-w-[1100px] mx-auto px-5 md:px-16 py-12 flex flex-col md:flex-row justify-between items-center gap-8">
     <div class="flex items-center gap-3">
       <svg class="w-8 h-8" fill="none" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
         <rect fill="#ffb59b" height="28" rx="2" width="20" x="28" y="12"/>
@@ -782,7 +780,7 @@
       <a class="font-body-md text-sm text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">隐私政策</a>
       <a class="font-body-md text-sm text-on-surface-variant hover:text-secondary transition-colors duration-300" href="#">使用条款</a>
     </div>
-    <div class="font-body-md text-sm text-secondary/60">&copy; 2024 StoryPebble. 用 AI 点亮每一个故事。</div>
+    <div class="font-body-md text-sm text-secondary/60">&copy; 2025 StoryPebble. 用 AI 点亮每一个故事。</div>
   </div>
 </footer>
 
@@ -1341,8 +1339,10 @@
 </script>
 <script>
 (function() {
-  var navLinks = document.querySelectorAll('nav a[href^="#"]');
+  var NAV_HEIGHT = 80;
+  var navLinks = document.querySelectorAll('#nav-links a[href^="#"]');
   var clickingNav = false;
+
   function setActiveLink(activeHref) {
     navLinks.forEach(function(link) {
       var href = link.getAttribute('href');
@@ -1356,34 +1356,49 @@
       }
     });
   }
+
   navLinks.forEach(function(link) {
     link.addEventListener('click', function(e) {
       var href = link.getAttribute('href');
+      e.preventDefault();
       if (href === '#') {
-        e.preventDefault();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         var target = document.querySelector(href);
         if (!target) return;
-        e.preventDefault();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        window.scrollTo({ top: target.offsetTop - NAV_HEIGHT, behavior: 'smooth' });
       }
       setActiveLink(href);
       clickingNav = true;
       setTimeout(function() { clickingNav = false; }, 800);
     });
   });
+
+  // IntersectionObserver for reliable active state
   var navSections = ['templates', 'how-it-works', 'gallery'];
-  window.addEventListener('scroll', function() {
+  var lastIntersecting = '';
+  var observer = new IntersectionObserver(function(entries) {
     if (clickingNav) return;
-    var scrollY = window.scrollY + 100;
-    var current = '';
-    navSections.forEach(function(id) {
-      var section = document.getElementById(id);
-      if (section && section.offsetTop <= scrollY) current = id;
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        lastIntersecting = entry.target.id;
+      }
     });
-    setActiveLink(current ? '#' + current : '#');
+    // If near top of page, activate Home
+    if (window.scrollY < 200) {
+      setActiveLink('#');
+      return;
+    }
+    setActiveLink(lastIntersecting ? '#' + lastIntersecting : '#');
+  }, { rootMargin: '-' + NAV_HEIGHT + 'px 0px -60% 0px', threshold: 0.1 });
+
+  navSections.forEach(function(id) {
+    var section = document.getElementById(id);
+    if (section) observer.observe(section);
   });
+
+  // Set initial active state
+  setActiveLink('#');
 })();
 </script>
 </html>

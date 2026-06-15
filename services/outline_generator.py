@@ -94,9 +94,16 @@ CHARACTER_SHEET_PROMPT = """为以下儿童绘本角色创建角色设定图。
 
 
 def _call_llm(prompt: str, system: str = "你只输出合法 JSON，不输出其他文字。") -> dict:
-    api_key = os.getenv("LLM_API_KEY") or os.getenv("NANO_BANANA_API_KEY")
-    base_url = os.getenv("LLM_BASE_URL") or os.getenv("NANO_BANANA_API_BASE", "https://api.openai.com/v1")
-    model = os.getenv("LLM_MODEL", "gpt-4o")
+    api_key = os.getenv("LLM_API_KEY")
+    base_url = os.getenv("LLM_BASE_URL")
+    model = os.getenv("LLM_MODEL")
+    if not api_key or not base_url or not model:
+        raise RuntimeError(
+            "LLM 未配置。请在 .env 中设置以下变量：\n"
+            "  LLM_API_KEY=sk-xxx\n"
+            "  LLM_BASE_URL=https://api.deepseek.com/v1  （或 OpenAI / 其他兼容地址）\n"
+            "  LLM_MODEL=deepseek-v4-flash                （或 gpt-4o / qwen-plus 等）"
+        )
 
     resp = requests.post(
         f"{base_url}/chat/completions",
